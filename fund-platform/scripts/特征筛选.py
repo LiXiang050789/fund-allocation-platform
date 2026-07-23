@@ -6,13 +6,13 @@ from scipy.stats import pearsonr
 
 # ===================== 全局配置（统一调参区） =====================
 # 路径
-RAW_FEAT_PATH = "clean/train_total_feature.csv"
-SAVE_FEAT_PATH = "clean/train_feature_filtered.csv"
-FEAT_IMPORTANCE_PATH = "result/feature_importance.csv"
-MONEY_FEAT_PATH = "clean/money_flow_month.csv"
-PRICE_TABLE_PATH = "clean/etf_price_clean.csv"
-os.makedirs("result", exist_ok=True)
-os.makedirs("clean", exist_ok=True)
+RAW_FEAT_PATH = "data/clean/train_total_feature.csv"
+SAVE_FEAT_PATH = "data/clean/train_feature_filtered.csv"
+FEAT_IMPORTANCE_PATH = "results/feature_importance.csv"
+MONEY_FEAT_PATH = "data/clean/money_flow_month.csv"
+PRICE_TABLE_PATH = "data/clean/etf_price_clean.csv"
+os.makedirs("results", exist_ok=True)
+os.makedirs("data/clean", exist_ok=True)
 
 # 资产列表
 ASSET_NAMES = ["hs300", "zz500", "kc50", "consume", "chip", "gold", "bond10"]
