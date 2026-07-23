@@ -9,30 +9,46 @@
 
 ### ✅ 已完成
 
-| 模块 | 状态 | 说明 |
-|------|------|------|
-| 数据采集 | ✅ | 7 只 ETF 行情 + 估值 + 宏观 + 情绪 + 趋势全覆盖 |
-| 数据清洗 | ✅ | zt 清洗脚本产出 `data/clean/train_total_feature.csv`（2798 行 × 177 列）|
-| 估值补采 | ✅ | 科创 50 + 消费估值已从理杏仁补全并通过 4 项校验，芯片估值待采 |
-| 估值补采 | ✅ | 全部 5 只权益 ETF（科创50/消费/芯片）估值已从理杏仁补全，总表 2798×182 列 |
-| 技术因子 | ✅ | 7 只 ETF 各 11 个技术指标已齐全（chip 从 OHLCV 自算）|
-| CPI | ✅ | 已并入 `cpi_current/yoy/mom/acc` 共 4 列 |
-| 评分系统 | ✅ | 4 维度（估值/宏观/情绪/趋势）评分已就绪，数据条件满足 |
-| 基线回测 | ✅ | 5 套策略回测完成（等权/风险平价/MVO/动量/动态评分），动态评分最大回撤 -17.82% 显著优于等权 -37.71% |
-| 项目目录 | ✅ | 已按执行手册规范搭建 `fund-platform/` |
+| 模块 | 状态 | 日期 | 说明 |
+|------|------|------|------|
+| 数据采集 | ✅ | 7/18 | 7 只 ETF 行情 + 估值 + 宏观 + 情绪 + 趋势全覆盖 |
+| 数据清洗 | ✅ | 7/19 | zt 清洗脚本产出 `data/clean/train_total_feature.csv`（2798×182 列）|
+| 估值补采 | ✅ | 7/19 | 全部 5 只权益 ETF 估值已从理杏仁补全并通过 4 项校验 |
+| 技术因子 | ✅ | 7/19 | 7 只 ETF × 11 技术指标齐全（chip 从 OHLCV 自算）|
+| CPI | ✅ | 7/19 | cpi_current/yoy/mom/acc 已并入 |
+| 环境装包 | ✅ | 7/23 | lightgbm/scipy/sb3/gymnasium/cvxopt/torch/sklearn 全部就绪 |
+| 特征筛选 | ✅ | 7/23 | zt 流水线跑通，182→37 列（IC+共线性+LGB 重要性）|
+| 评分系统 | ✅ | 7/23 | `calc_market_score.py` 逐行对标 sf docx 规则，输出 5 状态标签 |
+| PPO 环境 | ✅ | 7/23 | zt `portfolio_env.py` 完成，内嵌打分 + 滚动训练架构 |
+| 基线回测 | ✅ | 7/19→7/23 | 6 套策略同引擎对比（等权/风险平价/MVO/动量/动态评分/**LGB融合**）|
+| 项目目录 | ✅ | 7/19 | 按执行手册规范搭建 |
 
-### ⚠️ 进行中 / 待办
+### 6 套策略最终对比（2026-07-23）
+
+| 策略 | 年化 | 回撤 | 夏普 | 卡玛 | 风格 |
+|------|------|------|------|------|------|
+| 等权 | 14.2% | -37.7% | 0.45 | 0.38 | 基准线 |
+| 风险平价 | 13.5% | -27.7% | 0.54 | 0.49 | 低波动 |
+| MVO | 28.9% | -33.0% | 0.35 | 0.88 | 高收益高波动 |
+| 动量 | 17.6% | -48.4% | 0.45 | 0.36 | 趋势追逐 |
+| **动态评分** | **20.0%** | **-17.8%** | **0.50** | **1.12** | **最佳综合** |
+| **LGB 融合** | **12.2%** | **-16.9%** | **0.65** | **0.72** | **最佳夏普 + 最低回撤** |
+
+### ⚠️ 待办
 
 | 优先级 | 任务 | 负责人 |
 |--------|------|--------|
-| 🟢 P2 | index_price gold 列全空修复 | zt |
-| 🟢 P2 | margin_extended `_x` 后缀清理 | zt |
-| — | ETF 费率文档 + 资金流 + 行业权重/风格因子 | C（Week 2 前） |
-| — | 下一步：Week 2 LightGBM 收益预测 + Walk-Forward | A |
+| 🟡 | zt PPO 训练效果优化（当前净值 ~1.05 跑输基线） | zt |
+| 🟡 | `portfolio_env.py` PMI 列名修正（`pmi_生产经营活动预期指数` → `pmi_制造业采购经理指数`） | zt / A |
+| 🟡 | LGB 融合换手率优化（当前 11.5% 月均，可进一步降低） | A |
+| 🟢 | index_price gold 列全空修复 | zt |
+| 🟢 | margin_extended `_x` 后缀清理 | zt |
+| — | ETF 费率文档 + 资金流 + 行业权重 | C |
+| — | Week 3 任务（见执行手册） | 全员 |
 
 ### 数据缺口概览
 
-**✅ 估值缺口清零。** 5 只权益 ETF 全部 PE/PB/股息率/分位已通过四项校验并入总表。仅剩 index_price gold 列全空（不影响主流程）。
+**✅ 全部清零。** 5 只权益 ETF 估值/技术因子/宏观/CPI 全齐，仅剩 index_price gold 列全空（不影响主流程）。
 
 ---
 
@@ -49,18 +65,28 @@ fund-platform/
 │   │   └── consume/             # 消费理杏仁估值数据（21 文件）
 │   │   └── chip/                 # 芯片理杏仁估值数据（22 文件）
 │   ├── clean/                   # 清洗后数据
-│   │   ├── train_total_feature.csv  # ⭐ 最终建模表 (2798×177)
-│   │   ├── etf_price_clean.csv      # 7 ETF 收盘价
-│   │   ├── valuation_merged.csv     # 估值合并表（含 kc50 全套）
-│   │   ├── tech_factor_clean.csv    # 技术因子表 (7 ETF × 11)
+│   │   ├── train_total_feature.csv       # ⭐ 最终建模表 (2798×182)
+│   │   ├── train_feature_filtered.csv     # ⭐ 特征筛选后 (2798×38, 37特征)
+│   │   ├── market_score_daily.csv         # ⭐ sf规则评分输出 (2798×7)
+│   │   ├── etf_price_clean.csv           # 7 ETF 收盘价
+│   │   ├── valuation_merged.csv          # 估值合并表
+│   │   ├── tech_factor_clean.csv         # 技术因子表
 │   │   └── ... (12 个中间表)
-│   └── features/                # 特征数据（待产出）
+│   └── features/                # 特征数据
 ├── scripts/
-│   └── backtest_baselines.py    # ⭐ 5 套基线回测脚本
+│   ├── backtest_baselines.py    # ⭐ 6 套基线回测（含LGB融合）
+│   ├── lgb_walkforward.py       # ⭐ LightGBM Walk-Forward + 预测
+│   ├── calc_market_score.py     # ⭐ 评分系统（sf docx 规则）
+│   ├── 特征筛选.py               # zt 特征工程流水线
+│   ├── 完整训练脚本.py            # zt PPO 滚动训练
+│   ├── 三大基准策略.py            # zt 等权/风险平价/动量
+│   └── portfolio_metrics.py     # zt 风险指标工具
 ├── results/
-│   └── backtest/
-│       ├── baseline_metrics.csv # 5 策略 × 11 指标对比表
-│       └── baseline_nav.csv     # 5 条日频净值序列
+│   ├── backtest/
+│   │   ├── baseline_metrics.csv  # 6 策略 × 11 指标对比表
+│   │   └── baseline_nav.csv      # 6 条日频净值序列
+│   ├── pred_return_lgb_daily.csv # LGB 日频预测 (2798×7)
+│   └── feature_importance.csv   # 特征重要性排序
 ├── models/                      # 模型文件（待产出）
 ├── weights/                     # 策略权重（待产出）
 ├── docs/                        # 文档
