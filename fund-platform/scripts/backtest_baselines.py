@@ -563,4 +563,49 @@ for name, w_df in all_weights.items():
     for etf, w in last_w.items():
         print(f'  {etf}: {w*100:.1f}%')
 
-print('\n===== 5套基线回测完成 =====')
+# ============================================================
+# 8. 分段回测（市场阶段 × 策略矩阵）
+# ============================================================
+PERIODS = [
+    ('2015牛市',     '2015-01-05', '2015-06-12'),
+    ('2015股灾',     '2015-06-15', '2016-01-28'),
+    ('2016-2017慢牛', '2016-01-29', '2018-01-26'),
+    ('2018熊市',     '2018-01-29', '2019-01-04'),
+    ('2019-2020牛市', '2019-01-07', '2021-02-18'),
+    ('2021后震荡',    '2021-02-19', '2026-07-10'),
+]
+
+seg_results = []
+nav_all = pd.DataFrame(all_navs)
+nav_all.index = pd.DatetimeIndex(common_dates)
+
+for pname, start, end in PERIODS:
+    seg = nav_all.loc[start:end]
+    if len(seg) < 20:
+        continue
+    row = {'阶段': pname, '天数': len(seg)}
+    for col in nav_all.columns:
+        s = seg[col]
+        cum = s.iloc[-1] / s.iloc[0] - 1
+        days = max((s.index[-1] - s.index[0]).days, 1)
+        ann = (1+cum)**(365/days) - 1
+        peak = s.expanding().max()
+        mdd = ((s - peak) / peak).min()
+        row[f'{col}_累计'] = round(cum, 4)
+        row[f'{col}_年化'] = round(ann, 4)
+        row[f'{col}_回撤'] = round(mdd, 4)
+    seg_results.append(row)
+
+seg_df = pd.DataFrame(seg_results)
+seg_df.to_csv(f'{OUT}/segmented_backtest.csv', index=False, encoding='utf-8-sig')
+print('✅ 分段回测 → results/backtest/segmented_backtest.csv')
+
+# 打印摘要
+print(f'\n{"阶段":16s} {"等权":>8s} {"风险平价":>8s} {"MVO":>8s} {"动量":>8s} {"动态评分":>8s} {"LGB融合":>8s}')
+for _, r in seg_df.iterrows():
+    print(f'{r["阶段"]:16s}', end='')
+    for c in nav_all.columns:
+        print(f' {r[f"{c}_累计"]*100:7.1f}%', end='')
+    print()
+
+print('\n===== 6套基线回测完成 =====')

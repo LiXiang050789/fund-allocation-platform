@@ -120,7 +120,7 @@ class PortfolioEnv(gym.Env):
         safe_idx = np.clip(idx, 0, self.max_feature_idx)
         row_np = self.feat_np[safe_idx]
         hs300_pe = row_np[self.col_map["hs300_pe"]]
-        pmi = row_np[self.col_map["pmi_生产经营活动预期指数"]]
+        pmi = row_np[self.col_map["pmi_制造业采购经理指数"]]
         spread = row_np[self.col_map["bond_10y_2y_spread"]]
         margin_chg = row_np[self.col_map["margin_5d_chg"]]
         north_net = row_np[self.col_map["north_net"]]
