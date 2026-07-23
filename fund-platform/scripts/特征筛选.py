@@ -5,9 +5,9 @@ import os
 from scipy.stats import pearsonr
 
 # ===================== 路径与超参数（与原代码完全对齐） =====================
-RAW_FEAT_PATH = "clean/train_total_feature.csv"
-SAVE_FEAT_PATH = "clean/train_feature_filtered.csv"
-FEAT_IMPORTANCE_PATH = "result/feature_importance.csv"
+RAW_FEAT_PATH = "data/clean/train_total_feature.csv"
+SAVE_FEAT_PATH = "data/clean/train_feature_filtered.csv"
+FEAT_IMPORTANCE_PATH = "results/feature_importance.csv"
 os.makedirs("result", exist_ok=True)
 
 ASSET_NAMES = ["hs300", "zz500", "kc50", "consume", "chip", "gold", "bond10"]
@@ -103,7 +103,7 @@ def main():
     # 1. 读取特征数据
     df = pd.read_csv(RAW_FEAT_PATH, parse_dates=["date"], encoding="gbk")
     # 2. 读取价格表，拼接原始资产价格用于构造未来收益标签
-    price_df = pd.read_csv("clean/etf_price_clean.csv", parse_dates=["date"], encoding="gbk")
+    price_df = pd.read_csv("data/clean/etf_price_clean.csv", parse_dates=["date"], encoding="gbk")
     merge_cols = ["date", "hs300", "zz500", "kc50", "consume", "chip", "gold", "bond10"]
     df = pd.merge(df, price_df[merge_cols], on="date", how="left")
 
@@ -149,5 +149,5 @@ def main():
 if __name__ == "__main__":
     main()
     import pandas as pd
-    df = pd.read_csv("clean/train_feature_filtered.csv", encoding="utf-8-sig")
+    df = pd.read_csv("data/clean/train_feature_filtered.csv", encoding="utf-8-sig")
     print(df.drop("date",axis=1).std())

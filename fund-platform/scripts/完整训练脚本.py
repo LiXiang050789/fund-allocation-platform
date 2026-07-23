@@ -25,11 +25,11 @@ class CustomFeatureExtractor(BaseFeaturesExtractor):
         return self.mlp(observations)
 
 # ===================== 路径与全局超参 =====================
-DATA_PATH = "clean/train_feature_filtered.csv"
-PRICE_PATH = "clean/etf_price_clean.csv"
-MODEL_SAVE_DIR = "model/multi_model/"
-RESULT_SAVE_DIR = "result/multi_model/"
-LOG_SAVE_DIR = "log/train_log/"
+DATA_PATH = "data/clean/train_feature_filtered.csv"
+PRICE_PATH = "data/clean/etf_price_clean.csv"
+MODEL_SAVE_DIR = "models/multi_model/"
+RESULT_SAVE_DIR = "results/multi_model/"
+LOG_SAVE_DIR = "logs/train_log/"
 
 os.makedirs(MODEL_SAVE_DIR, exist_ok=True)
 os.makedirs(RESULT_SAVE_DIR, exist_ok=True)
