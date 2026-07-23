@@ -11,6 +11,7 @@ warnings.filterwarnings('ignore')
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = f'{BASE}/data/clean'
 OUT  = f'{BASE}/results/backtest'
+LGB_PRED_PATH = f'{BASE}/results/pred_return_lgb_daily.csv'
 os.makedirs(OUT, exist_ok=True)
 
 # ============================================================
@@ -27,6 +28,8 @@ MVO_WINDOW   = 60              # MVO 协方差窗口 (交易日)
 ETF_CODES    = ['hs300','zz500','kc50','consume','chip','gold','bond10']
 EQUITY_ETFS  = ['hs300','zz500','kc50','consume','chip']
 HEDGE_ETFS   = ['gold','bond10']
+EQUITY_INDEXES = [ETF_CODES.index(e) for e in EQUITY_ETFS]
+HEDGE_INDEXES  = [ETF_CODES.index(e) for e in HEDGE_ETFS]
 
 # ============================================================
 # 1. 数据加载
@@ -231,9 +234,6 @@ def strategy_dynamic_score(dates):
         '上行': 0.55, '震荡偏强': 0.45, '震荡': 0.35,
         '下行': 0.15, '极寒': 0.05
     }
-    EQUITY_INDEXES = [ETF_CODES.index(e) for e in EQUITY_ETFS]
-    HEDGE_INDEXES  = [ETF_CODES.index(e) for e in HEDGE_ETFS]
-
     monthly = get_monthly_rebalance_dates(dates)
     weights = {}
     for d in monthly:
@@ -296,6 +296,88 @@ def strategy_dynamic_score(dates):
         else:
             w[avail_mask] = 1.0 / avail_mask.sum()
 
+        weights[pd.Timestamp(d)] = w
+
+    return pd.DataFrame(weights, index=ETF_CODES).T
+
+# ============================================================
+# 3.6 LGB 预测加载 (供融合策略使用)
+# ============================================================
+lgb_pred = None
+if os.path.exists(LGB_PRED_PATH):
+    lgb_pred = pd.read_csv(LGB_PRED_PATH, encoding='utf-8-sig', parse_dates=['date']).set_index('date')
+    print(f'[LGB] 预测文件已加载: {len(lgb_pred)}天, {lgb_pred.shape[1]} ETF')
+
+def strategy_lgb_fusion(dates):
+    """
+    策略6: LGB融合 — 动态评分定仓位 + LGB预测定权益内部排序
+    """
+    BASE_EQUITY = {
+        '上行': 0.55, '震荡偏强': 0.45, '震荡': 0.35,
+        '下行': 0.15, '极寒': 0.05
+    }
+    if lgb_pred is None:
+        print('[LGB融合] ⚠️ 预测文件不存在，回退为纯动态评分')
+        return strategy_dynamic_score(dates)
+
+    monthly = get_monthly_rebalance_dates(dates)
+    weights = {}
+    for d in monthly:
+        try:
+            loc = dates.get_loc(d)
+        except KeyError:
+            continue
+
+        try:
+            st = state.iloc[state.index.get_loc(d)]
+        except (KeyError, IndexError):
+            st = '震荡'
+        if pd.isna(st):
+            st = '震荡'
+
+        target_equity = BASE_EQUITY.get(st, 0.35)
+        avail_mask = mask_available(None, loc)
+        eq_avail = [i for i in EQUITY_INDEXES if avail_mask[i]]
+        hedge_avail = [i for i in HEDGE_INDEXES if avail_mask[i]]
+        w = np.zeros(7)
+
+        # === 权益内: LGB预测加权 (核心差异点) ===
+        if eq_avail and target_equity > 0:
+            eq_etfs = [ETF_CODES[i] for i in eq_avail]
+            # 取月末前21天LGB日预测均值
+            lgb_loc = lgb_pred.index.get_indexer([d], method='pad')[0]
+            lgb_window = lgb_pred.index[max(0, lgb_loc-21):lgb_loc+1]
+            eq_preds = np.zeros(len(eq_etfs))
+            for j, e in enumerate(eq_etfs):
+                if e in lgb_pred.columns:
+                    vals = lgb_pred[e].loc[lgb_window.intersection(lgb_pred.index)].dropna()
+                    eq_preds[j] = vals.mean() if len(vals) > 0 else 0
+            # 正预测加权
+            pos = np.clip(eq_preds, 0, None)
+            eq_w = pos / pos.sum() if pos.sum() > 0 else np.ones(len(eq_avail))/len(eq_avail)
+        else:
+            eq_w = np.ones(len(eq_avail))/max(len(eq_avail),1)
+            target_equity = 0
+
+        for j, idx in enumerate(eq_avail):
+            w[idx] = eq_w[j] * target_equity if j < len(eq_w) else 0
+
+        # === 非权益内: 风险平价 (与策略5一致) ===
+        if hedge_avail and (1-target_equity) > 0:
+            start = max(0, loc - MVO_WINDOW)
+            ret_window = returns.iloc[start:loc+1]
+            sub_ret = ret_window.iloc[:, hedge_avail]
+            if sub_ret.shape[1] >= 2:
+                cov = sub_ret.cov().values
+                h_w = solve_risk_parity(cov, np.ones(len(hedge_avail), dtype=bool))
+            else:
+                h_w = np.ones(len(hedge_avail))
+            h_w = h_w / h_w.sum()
+            for j, idx in enumerate(hedge_avail):
+                w[idx] = h_w[j] * (1-target_equity) if j < len(h_w) else 0
+
+        s = w.sum()
+        w = w / s if s > 0 else np.ones(7)/7
         weights[pd.Timestamp(d)] = w
 
     return pd.DataFrame(weights, index=ETF_CODES).T
@@ -434,6 +516,7 @@ strategies = [
     ('MVO',       strategy_mvo),
     ('动量',      strategy_momentum),
     ('动态评分',  strategy_dynamic_score),
+    ('LGB融合',   strategy_lgb_fusion),
 ]
 
 results = []
