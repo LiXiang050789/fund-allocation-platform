@@ -25,6 +25,7 @@ MIN_WEIGHT   = 0.0
 RISK_FREE    = 0.025           # 无风险利率 2.5%
 LOOKBACK_MOM = 12              # 动量回看月数
 MVO_WINDOW   = 60              # MVO 协方差窗口 (交易日)
+COV_WINDOW_EQ = 252             # BL 协方差窗口 (1年交易日)
 ETF_CODES    = ['hs300','zz500','kc50','consume','chip','gold','bond10']
 EQUITY_ETFS  = ['hs300','zz500','kc50','consume','chip']
 HEDGE_ETFS   = ['gold','bond10']
@@ -341,10 +342,11 @@ def strategy_lgb_fusion(dates):
         hedge_avail = [i for i in HEDGE_INDEXES if avail_mask[i]]
         w = np.zeros(7)
 
-        # === 权益内: LGB预测加权 (核心差异点) ===
+        # === 权益内: LGB 正预测加权 ===
+        # 曾测 BL (tau 0.05-0.8): 年化~8%/夏普~0.55, 不如简单排名(12%/0.65)
+        # 结论: IC≈0.06 弱信号下 BL 先验稀释了有用信息
         if eq_avail and target_equity > 0:
             eq_etfs = [ETF_CODES[i] for i in eq_avail]
-            # 取月末前21天LGB日预测均值
             lgb_loc = lgb_pred.index.get_indexer([d], method='pad')[0]
             lgb_window = lgb_pred.index[max(0, lgb_loc-21):lgb_loc+1]
             eq_preds = np.zeros(len(eq_etfs))
@@ -352,7 +354,6 @@ def strategy_lgb_fusion(dates):
                 if e in lgb_pred.columns:
                     vals = lgb_pred[e].loc[lgb_window.intersection(lgb_pred.index)].dropna()
                     eq_preds[j] = vals.mean() if len(vals) > 0 else 0
-            # 正预测加权
             pos = np.clip(eq_preds, 0, None)
             eq_w = pos / pos.sum() if pos.sum() > 0 else np.ones(len(eq_avail))/len(eq_avail)
         else:
