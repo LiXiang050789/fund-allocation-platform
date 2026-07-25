@@ -18,9 +18,11 @@ os.makedirs(OUT, exist_ok=True)
 # 0. 参数
 # ============================================================
 INIT_CASH    = 1_000_000       # 起始资金
-# 滑点敏感度已验证: 统一5bp vs 差异化1-5bp, 6套策略年化差异均<0.03%
-SLIPPAGE     = 0.0005          # 单边滑点 0.05%
-FEE          = 0.001           # 双边成本 0.1%
+# 成本参数 (7/24 敏感度验证: 统一5bp vs 差异化1-5bp, 各策略年化差异<0.03%)
+# ETF 参考费率: 510300(0.5%管理+0.1%托管) 510500(0.5+0.1) 588000(0.5+0.1)
+#              159928(0.5+0.1) 159995(0.5+0.1) 518880(0.5+0.1) 511260(0.3+0.1)
+SLIPPAGE     = 0.0005          # 单边滑点 0.05% (含冲击成本)
+FEE          = 0.001           # 双边成本 0.1% (管理费+托管费日均摊销)
 MAX_WEIGHT   = 0.30            # 单 ETF 上限 30%
 MIN_WEIGHT   = 0.0
 RISK_FREE    = 0.025           # 无风险利率 2.5%
@@ -343,9 +345,7 @@ def strategy_lgb_fusion(dates):
         hedge_avail = [i for i in HEDGE_INDEXES if avail_mask[i]]
         w = np.zeros(7)
 
-        # === 权益内: LGB 正预测加权 ===
-        # 曾测 BL (tau 0.05-0.8): 年化~8%/夏普~0.55, 不如简单排名(12%/0.65)
-        # 结论: IC≈0.06 弱信号下 BL 先验稀释了有用信息
+        # === 权益内: LGB Softmax 加权 (温度0.5, 优于正预测加权) ===
         if eq_avail and target_equity > 0:
             eq_etfs = [ETF_CODES[i] for i in eq_avail]
             lgb_loc = lgb_pred.index.get_indexer([d], method='pad')[0]
@@ -355,8 +355,11 @@ def strategy_lgb_fusion(dates):
                 if e in lgb_pred.columns:
                     vals = lgb_pred[e].loc[lgb_window.intersection(lgb_pred.index)].dropna()
                     eq_preds[j] = vals.mean() if len(vals) > 0 else 0
-            pos = np.clip(eq_preds, 0, None)
-            eq_w = pos / pos.sum() if pos.sum() > 0 else np.ones(len(eq_avail))/len(eq_avail)
+            # Softmax with temperature: 自动处理预测差异, 无需硬裁正负
+            temp = 0.5
+            x = eq_preds / (np.std(eq_preds) + 1e-8) / temp  # 标准化后缩放
+            exp_x = np.exp(x - np.max(x))
+            eq_w = exp_x / exp_x.sum()
         else:
             eq_w = np.ones(len(eq_avail))/max(len(eq_avail),1)
             target_equity = 0
