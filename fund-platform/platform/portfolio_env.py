@@ -75,16 +75,18 @@ class PortfolioEnv(gym.Env):
 
         # 轻量化：仅保留最近2期资产收益
         self.hist_returns = deque(maxlen=2)
-        self.hist_ret_dim = N_ASSET * 2  # 定义历史收益观测维度
+        # 新增窗口时序缓存，用于拼接区间均值特征
+
+        self.hist_ret_dim = N_ASSET * 2
         self.vol_ewma = 0.0
         self.peak_value = 1.0
-        self.sharpe_rolling = 0.0  # 初始化滚动夏普缓存
+        self.sharpe_rolling = 0.0
 
         self.price_df_raw = price_df.reset_index(drop=True)
         self.price_array = self.price_df_raw[ASSET_NAMES].values.astype(np.float32)
         self.feature_array = self.feat_np
 
-        # 外部可调超参
+        # 外部超参
         self.MIN_W = min_w
         self.MAX_W = max_w
         self.TRADING_COST_RATE = trade_cost
@@ -100,20 +102,21 @@ class PortfolioEnv(gym.Env):
 
         self.current_idx = self.start_idx
         self.window = window
+        self.score_cache = deque(maxlen=self.window)
+        self.asset_ret_cache = deque(maxlen=self.window)
         self.reward_coef = reward_coef
 
         self.action_space = spaces.Box(low=-5.0, high=5.0, shape=(N_ASSET,), dtype=np.float32)
         self.market_score_dim = 4
-        # 修正观测维度，匹配2期历史收益
-        self.obs_dim = self.feature_array.shape[1] + N_ASSET + self.market_score_dim + self.hist_ret_dim
+        self.extra_seq_dim = 1 + N_ASSET  # 1个总分均值 + 7个资产收益均值，共8维
+        # 修正观测总维度：原始维度 + 新增区间时序特征维度
+        self.obs_dim = self.feature_array.shape[1] + N_ASSET + self.market_score_dim + self.hist_ret_dim + self.extra_seq_dim
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(self.obs_dim,), dtype=np.float32)
 
         self.last_weight = np.zeros(N_ASSET, dtype=np.float32)
         self.last_weight[0] = 1.0
         self.net_value = 1.0
-        # 原有代码不变
         self.ret_queue = deque(maxlen=window)
-        # 新增：存储窗口内净值序列，用于中长期收益计算
         self.window_net_cache = deque(maxlen=window)
 
         self.val_score = 0.0
@@ -126,7 +129,7 @@ class PortfolioEnv(gym.Env):
         north_raw = self.feat_np[:, self.col_map["north_net"]]
         self.north_20roll = pd.Series(np.nan_to_num(north_raw, nan=0.0)).rolling(20, min_periods=1).sum().values
 
-        # ========== 修复时序泄露：正确滞后1期，弃用np.roll ==========
+        # 时序滞后指标，避免数据泄露
         spread_raw = self.feat_np[:, self.col_map["bond_10y_2y_spread"]]
         margin_raw = self.feat_np[:, self.col_map["margin_5d_chg"]]
         self.spread_shift = np.zeros_like(spread_raw)
@@ -135,7 +138,7 @@ class PortfolioEnv(gym.Env):
             self.spread_shift[1:] = spread_raw[:-1]
             self.margin_shift[1:] = margin_raw[:-1]
 
-        # 预计算沪深300 MA20
+        # 沪深300 MA20预计算
         hs300_series = self.price_df_raw["hs300"]
         self.hs300_ma20_series = hs300_series.rolling(20, min_periods=1).mean().values
 
@@ -145,7 +148,6 @@ class PortfolioEnv(gym.Env):
         exp_x = np.exp(x - max_x)
         return exp_x / np.sum(exp_x, axis=-1, keepdims=True)
 
-    # 新增缺失的夏普计算方法
     def calc_rolling_sharpe(self, ret_list):
         rets = np.array(ret_list)
         mean_r = np.mean(rets)
@@ -186,26 +188,24 @@ class PortfolioEnv(gym.Env):
 
         self.calc_daily_market_score(self.current_idx)
 
-        # 资产收益计算
+        # 当日资产收益
         price_t = self.price_array[self.current_idx]
         price_t1 = self.price_array[self.current_idx + 1]
         returns = (price_t1 - price_t) / (price_t + 1e-8)
         returns = np.clip(returns, -0.20, 0.20)
         port_ret = np.dot(target_weight, returns)
 
-        # 交易成本扣减
+        # 交易成本
         turnover = np.sum(np.abs(target_weight - self.last_weight))
         port_ret -= turnover * self.TRADING_COST_RATE
         port_ret = np.clip(port_ret, -0.10, 0.10)
 
         self.net_value *= (1 + port_ret)
         self.ret_queue.append(port_ret)
-        # 新增：记录每日净值，用于周期收益
         self.window_net_cache.append(self.net_value)
-
         self.hist_returns.append(returns)
 
-        # ============ 滚动夏普计算（保留你8:2混合夏普逻辑不变） ============
+        # 滚动夏普计算
         hist_rets = list(self.ret_queue)
         if len(hist_rets) < self.window:
             pad = [0.0] * (self.window - len(hist_rets))
@@ -214,24 +214,22 @@ class PortfolioEnv(gym.Env):
         sharpe_delta = current_sharpe - self.sharpe_rolling
         self.sharpe_rolling = current_sharpe
 
-        # 混合夏普主奖励 0.8绝对夏普 + 0.2增量
+        # 混合夏普奖励 0.8绝对 + 0.2增量
         coef_profit, coef_vol, coef_dd, coef_turn = self.reward_coef
         weight_abs = 0.8
         weight_delta = 0.2
         r_abs = current_sharpe / 100
         r_sharpe = coef_profit * (weight_abs * r_abs + weight_delta * sharpe_delta)
 
-        # ============ 新增：中长期窗口累计收益奖励（核心改进，解决短期噪声过拟合） ============
+        # 中长期窗口累计收益奖励（权重提升至0.7）
         long_term_reward = 0.0
-        # 缓存满窗口再计算周期收益
         if len(self.window_net_cache) >= self.window:
             start_net = list(self.window_net_cache)[0]
             end_net = self.net_value
             window_cum_return = (end_net / (start_net + 1e-8)) - 1.0
-            # 中长期收益权重0.3，平滑短期单日波动
-            long_term_reward = 0.3 * window_cum_return
+            long_term_reward = 0.7 * window_cum_return
 
-        # ============ 原有风险惩罚不变 ============
+        # 风险惩罚
         self.vol_ewma = 0.9 * self.vol_ewma + 0.1 * abs(port_ret)
         vol_penalty = coef_vol * self.vol_ewma
 
@@ -245,7 +243,7 @@ class PortfolioEnv(gym.Env):
         lower_violation = np.sum(np.maximum(0.0, self.MIN_W - target_weight))
         constraint_penalty = self.CONSTRAINT_COEF * (upper_violation + lower_violation)
 
-        # ============ 总奖励 = 夏普奖励 + 中长期收益奖励 - 各类惩罚 ============
+        # 总奖励
         reward = r_sharpe + long_term_reward - vol_penalty - dd_penalty - turn_penalty - constraint_penalty
         reward = np.clip(reward, -5.0, 5.0)
 
@@ -258,35 +256,48 @@ class PortfolioEnv(gym.Env):
             "turnover": turnover,
             "net_value": self.net_value,
             "sharpe": current_sharpe,
-            "total_market_score": self.total_market_score,
+            "total_score": self.total_market_score,
             "val_score": self.val_score,
             "macro_score": self.macro_score,
             "sent_score": self.sent_score,
             "trend_score": self.trend_score,
         }
-        # step中构造obs前
 
-        # 构造观测向量（适配2期历史收益）
+        # 基础观测特征拼接
         obs_idx = self.current_idx if not terminated else self.current_idx - 1
         obs_idx = np.clip(obs_idx, 0, self.feature_array.shape[0] - 1)
         obs_feat = self.feature_array[obs_idx]
-        # ========== 重构hist_flat生成逻辑，固定输出14维 ==========
-        # 先创建全0数组，固定14维（2期×7资产）
+
         hist_flat = np.zeros(self.hist_ret_dim, dtype=np.float32)
-        # 取出当前缓存的历史收益列表
         hist_list = list(self.hist_returns)
-        # 最多取最近2期，按顺序填充
         fill_len = min(len(hist_list), 2)
         for i in range(fill_len):
-            # 第i期资产收益，写入对应位置
             hist_flat[i * N_ASSET: (i + 1) * N_ASSET] = hist_list[i]
-        obs = np.concatenate([
+
+        base_obs = np.concatenate([
             obs_feat,
             self.last_weight,
             np.array([self.val_score, self.macro_score, self.sent_score, self.trend_score]),
             hist_flat
         ])
-        total = len(obs_feat) + 7 + 4 + len(hist_flat)
+
+        # 计算窗口均值时序特征
+        score_mean = np.mean(list(self.score_cache)) if len(self.score_cache) > 0 else 0.0
+        if len(self.asset_ret_cache) > 0:
+            ret_array = np.array(list(self.asset_ret_cache))
+            asset_mean_ret = ret_array.mean(axis=0)
+        else:
+            asset_mean_ret = np.zeros(N_ASSET)
+        extra_seq_feat = np.concatenate([[score_mean], asset_mean_ret])
+
+        # 完整观测向量
+        obs = np.concatenate([base_obs, extra_seq_feat])
+        obs = np.nan_to_num(obs, nan=0.0, posinf=1e3, neginf=-1e3)
+
+        # 【修正】缓存更新放在obs构造完成后，时序不会错位
+        self.score_cache.append(self.total_market_score)
+        self.asset_ret_cache.append(returns.copy())
+
         return obs, reward, terminated, truncated, info
 
     def reset(self, seed=None, options=None):
@@ -295,26 +306,30 @@ class PortfolioEnv(gym.Env):
         self.net_value = 1.0
         self.last_weight = np.zeros(N_ASSET, dtype=np.float32)
         self.last_weight[0] = 1.0
+
+        # 清空所有缓存，防止跨区间污染
         self.ret_queue.clear()
         self.hist_returns.clear()
-        # 新增清空中长期净值缓存
         self.window_net_cache.clear()
+        self.score_cache.clear()
+        self.asset_ret_cache.clear()
 
         self.vol_ewma = 0.0
         self.peak_value = 1.0
-        self.sharpe_rolling = 0.0  # 重置夏普缓存
+        self.sharpe_rolling = 0.0
 
         self.calc_daily_market_score(self.start_idx)
         obs_feat = self.feature_array[self.start_idx]
-        # reset中替换原有hist_flat代码
         hist_flat = np.zeros(self.hist_ret_dim, dtype=np.float32)
-
-        obs = np.concatenate([
+        base_obs = np.concatenate([
             obs_feat,
             self.last_weight,
             np.array([self.val_score, self.macro_score, self.sent_score, self.trend_score]),
             hist_flat
         ])
+        # 初始无历史数据，时序特征全0
+        extra_seq_feat = np.zeros(self.extra_seq_dim)
+        obs = np.concatenate([base_obs, extra_seq_feat])
         obs = np.nan_to_num(obs, nan=0.0, posinf=1e3, neginf=-1e3)
         info = {}
         return obs, info
