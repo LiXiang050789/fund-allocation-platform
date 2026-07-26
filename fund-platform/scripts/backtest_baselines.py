@@ -439,6 +439,11 @@ def run_backtest(name, weight_df, dates, prices_df, returns_df):
     # 扣除滑点 (已验证: 统一5bp vs 差异化1-5bp, 各策略年化差异<0.03%)
     daily_ret = daily_ret - SLIPPAGE / 252
 
+    # 扣除管理费+托管费 (每日计提, xf 采集实际费率: 宽基0.20% 行业/商品0.60% 国债0.20%)
+    ANNUAL_FEE = np.array([0.002, 0.002, 0.002, 0.006, 0.006, 0.006, 0.002])
+    daily_fee = (daily_weights * ANNUAL_FEE).sum(axis=1) / 252
+    daily_ret = daily_ret - daily_fee
+
     # 累计净值
     nav = (1 + daily_ret).cumprod() * INIT_CASH
     nav_returns = daily_ret.copy()
