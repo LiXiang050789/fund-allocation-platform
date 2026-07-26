@@ -14,7 +14,6 @@ import pandas as pd
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "platform"))
 from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 # 注释断点回调，减少IO
 # from stable_baselines3.common.callbacks import CheckpointCallback
 # 使用优化后的夏普增量奖励环境
@@ -35,87 +34,76 @@ os.environ["SB3_ALLOW_GYM_V0"] = "1"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"训练设备：{device}")
 
-# ===================== 轻量化时序LSTM特征提取器 =====================
-class CustomLSTMFeatureExtractor(BaseFeaturesExtractor):
-    def __init__(self, observation_space, features_dim=64):
-        super().__init__(observation_space, features_dim)
-        self.input_dim = observation_space.shape[0]
-        self.lstm_hidden = 96
-        self.lstm = nn.LSTM(input_size=self.input_dim, hidden_size=self.lstm_hidden, batch_first=True)
-        self.proj = nn.Sequential(
-            nn.Linear(self.lstm_hidden, 96),
-            nn.ReLU(),
-            nn.Linear(96, features_dim),
-            nn.ReLU()
-        )
+# ===================== 删掉没用的LSTM类，直接删除这一大段 =====================
+# class CustomLSTMFeatureExtractor(BaseFeaturesExtractor):
+#     def __init__(self, observation_space, features_dim=64):
+#         super().__init__(observation_space, features_dim)
+#         self.input_dim = observation_space.shape[0]
+#         self.lstm_hidden = 96
+#         self.lstm = nn.LSTM(input_size=self.input_dim, hidden_size=self.lstm_hidden, batch_first=True)
+#         self.proj = nn.Sequential(
+#             nn.Linear(self.lstm_hidden, 96),
+#             nn.ReLU(),
+#             nn.Linear(96, features_dim),
+#             nn.ReLU()
+#         )
+#
+#     def forward(self, observations: torch.Tensor) -> torch.Tensor:
+#         batch_size = observations.shape[0]
+#         # 扩充时序维度 (batch, seq_len=1, feature_dim)
+#         x = observations.unsqueeze(1)
+#         # 每次前向动态初始化隐状态，不缓存，适配任意batch
+#         h0 = torch.zeros(1, batch_size, self.lstm_hidden, device=x.device)
+#         c0 = torch.zeros(1, batch_size, self.lstm_hidden, device=x.device)
+#         out, _ = self.lstm(x, (h0, c0))
+#         # 取单步时序输出
+#         last_hidden = out[:, -1, :]
+#         feat = self.proj(last_hidden)
+#         return feat
 
-    def forward(self, observations: torch.Tensor) -> torch.Tensor:
-        batch_size = observations.shape[0]
-        # 扩充时序维度 (batch, seq_len=1, feature_dim)
-        x = observations.unsqueeze(1)
-        # 每次前向动态初始化隐状态，不缓存，适配任意batch
-        h0 = torch.zeros(1, batch_size, self.lstm_hidden, device=x.device)
-        c0 = torch.zeros(1, batch_size, self.lstm_hidden, device=x.device)
-        out, _ = self.lstm(x, (h0, c0))
-        # 取单步时序输出
-        last_hidden = out[:, -1, :]
-        feat = self.proj(last_hidden)
-        return feat
 
-
-
-# ===================== 路径 & 全局超参（只保留一份PPO_KWARGS，轻量化网络） =====================
-# 脚本所在目录 E:\农行杯\2026\1
+# ===================== 路径 & 全局超参 =====================
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# 你的csv直接在 1/clean/ 下，没有data文件夹
 DATA_PATH = os.path.join(SCRIPT_DIR, "clean", "train_feature_filtered.csv")
 PRICE_PATH = os.path.join(SCRIPT_DIR, "clean", "etf_price_clean.csv")
 
-# 模型、结果、日志输出目录，放在脚本同级
+# 文件夹创建
 MODEL_SAVE_DIR = os.path.join(SCRIPT_DIR, "models", "multi_model")
 RESULT_SAVE_DIR = os.path.join(SCRIPT_DIR, "results", "multi_model")
 LOG_SAVE_DIR = os.path.join(SCRIPT_DIR, "logs", "train_log")
-
-# 自动创建输出文件夹
 for p in [MODEL_SAVE_DIR, RESULT_SAVE_DIR, LOG_SAVE_DIR]:
     os.makedirs(p, exist_ok=True)
 
-# 窗口参数
-TRAIN_WINDOW = 800
-VAL_WINDOW = 200
-PREDICT_WINDOW = 200
-EARLY_STOP_PATIENCE = 20   # 缩短早停等待，减少无效迭代
-MIN_ITER = 15              # 保底迭代减少，更快出结果
-EPOCH_STEP = 3000          # 单次迭代步数从4000→3000，提速25%
-RL_WINDOW = 60             # 拉长观测窗口，匹配中长期奖励逻辑
-REWARD_COEF = (6.0, 0.08, 0.4, 0.005)
+# 窗口超参（优化版，防过拟合）
+TRAIN_WINDOW = 1000
+VAL_WINDOW = 150
+PREDICT_WINDOW = 150
+EARLY_STOP_PATIENCE = 15
+MIN_ITER = 15
+EPOCH_STEP = 3000
+RL_WINDOW = 60
+REWARD_COEF = (10.0, 0.02, 0.1, 0.005)
 
-# PPO轻量化提速参数
+# PPO超参：纯MLP、高探索、看重远期收益
 PPO_KWARGS = {
     "learning_rate": 3e-4,
     "n_steps": 1024,
     "batch_size": 128,
-    "gamma": 0.995,
-    "clip_range": 0.2,
-    "ent_coef": 0.02,
+    "gamma": 0.998,
+    "clip_range": 0.25,
+    "ent_coef": 0.05,
     "max_grad_norm": 0.5,
     "verbose": 0,
     "device": device,
     "seed": SEED,
-    # 启用自定义LSTM特征提取器
     "policy_kwargs": {
-        "features_extractor_class": CustomLSTMFeatureExtractor,
-        "features_extractor_kwargs": {"features_dim": 64},
-        "net_arch": [64, 32],
+        "net_arch": [128, 64],
     }
 }
 
-
-
 FINE_TUNE_LR = 8e-5
 
-# ===================== 数据加载（保留原有防泄露逻辑） =====================
+# ===================== 数据加载 =====================
 def load_data():
     feat = pd.read_csv(DATA_PATH, parse_dates=["date"], encoding="gbk")
     price = pd.read_csv(PRICE_PATH, parse_dates=["date"], encoding="gbk")
@@ -130,7 +118,7 @@ def load_data():
     feat_only = feat.drop(columns=["date"])
     return feat_only, date_col, price
 
-# ===================== Z-Score工具 =====================
+# ===================== Z-Score标准化 =====================
 def get_train_scaler(train_feat_df):
     mean = train_feat_df.mean()
     std = train_feat_df.std()
@@ -140,22 +128,25 @@ def get_train_scaler(train_feat_df):
 def apply_zscore(feat_df, mean, std):
     return (feat_df - mean) / std
 
-# ===================== 单轮训练 =====================
+# ===================== 单轮训练（关闭增量、迭代提升至40轮） =====================
 def train_single_round(model_cls, model_kwargs, feat_only, price_df,
                        train_start, train_end, val_start, val_end,
-                       round_id, model_name, prev_model_path=None):
+                       round_id, model_name):
     train_feat_raw = feat_only.iloc[train_start:train_end].copy()
     train_mean, train_std = get_train_scaler(train_feat_raw)
-    feat_norm = feat_only.copy()
-    feat_norm = apply_zscore(feat_norm, train_mean, train_std)
+    feat_norm = apply_zscore(feat_only, train_mean, train_std)
 
+    # 放开权重上限、降低交易摩擦
     raw_train_env = PortfolioEnv(
         feature_df=feat_norm,
         price_df=price_df,
         start_idx=train_start,
         end_idx=train_end,
         window=RL_WINDOW,
-        reward_coef=REWARD_COEF
+        reward_coef=REWARD_COEF,
+        min_w=0.01,
+        max_w=0.5,
+        trade_cost=0.0003
     )
     raw_val_env = PortfolioEnv(
         feature_df=feat_norm,
@@ -163,18 +154,16 @@ def train_single_round(model_cls, model_kwargs, feat_only, price_df,
         start_idx=val_start,
         end_idx=val_end,
         window=RL_WINDOW,
-        reward_coef=REWARD_COEF
+        reward_coef=REWARD_COEF,
+        min_w=0.01,
+        max_w=0.5,
+        trade_cost=0.0003
     )
     train_env = Monitor(raw_train_env)
     val_env = Monitor(raw_val_env)
 
-    # 增量加载模型，自动降低学习率
-    if prev_model_path is not None and os.path.exists(prev_model_path):
-        print(f"  增量加载历史模型，微调学习率={FINE_TUNE_LR}")
-        model = model_cls.load(prev_model_path, env=train_env, device=device)
-        model.learning_rate = FINE_TUNE_LR
-    else:
-        model = model_cls("MlpPolicy", train_env, **model_kwargs)
+    # 每轮全新初始化模型，彻底关闭增量加载
+    model = model_cls("MlpPolicy", train_env, **model_kwargs)
 
     best_sharpe = -np.inf
     patience = 0
@@ -182,10 +171,9 @@ def train_single_round(model_cls, model_kwargs, feat_only, price_df,
     log_path = os.path.join(LOG_SAVE_DIR, f"{model_name}_round{round_id}_train_log.csv")
     log_records = []
 
-    # 移除多余初始learn，无断点回调
-    for train_iter in range(30):
+    # 迭代次数从30 → 40，给模型更多寻优机会
+    for train_iter in range(40):
         model.learn(total_timesteps=EPOCH_STEP, reset_num_timesteps=False)
-        # 验证集回测
         obs, _ = val_env.reset()
         done = False
         net_list = [1.0]
@@ -203,8 +191,6 @@ def train_single_round(model_cls, model_kwargs, feat_only, price_df,
             "vol": metrics["年化波动"],
             "mdd": metrics["最大回撤"]
         })
-        # 【提速优化】注释单轮迭代打印，仅保留关键轮次输出
-        # print(f"轮次{round_id} 迭代{train_iter} | 夏普:{current_sharpe:.2f} 最大回撤:{metrics['最大回撤']:.2%}")
         if current_sharpe > best_sharpe:
             best_sharpe = current_sharpe
             model.save(best_model_path)
@@ -218,7 +204,7 @@ def train_single_round(model_cls, model_kwargs, feat_only, price_df,
     best_model = model_cls.load(best_model_path, device=device)
     return best_model, train_mean, train_std
 
-# ===================== 预测、调仓分析函数 =====================
+# ===================== 预测函数（同步放开权重、降低交易成本） =====================
 def predict_round(model, feat_only, train_mean, train_std, date_col, price_df, pred_start, pred_end):
     feat_norm = apply_zscore(feat_only, train_mean, train_std)
     pred_env = PortfolioEnv(
@@ -227,8 +213,12 @@ def predict_round(model, feat_only, train_mean, train_std, date_col, price_df, p
         start_idx=pred_start,
         end_idx=pred_end,
         window=RL_WINDOW,
-        reward_coef=REWARD_COEF
+        reward_coef=REWARD_COEF,
+        min_w=0.01,
+        max_w=0.5,
+        trade_cost=0.0003
     )
+
     obs, _ = pred_env.reset()
     done = False
     records = []
@@ -272,7 +262,7 @@ def analyze_turnover(turnover_series, trade_cost=0.0005):
         print("风格：低频持有")
     return {"avg": avg_turnover, "median": median_turnover, "zero_ratio": zero_turnover_ratio, "annual_cost": annual_cost}
 
-# ===================== 滚动主流程 =====================
+# ===================== 滚动主流程（删除所有prev_model相关代码） =====================
 def run_rolling_for_model(model_name, model_cls, model_kwargs):
     feat_only, date_col, price_df = load_data()
     total_len = len(feat_only)
@@ -280,18 +270,16 @@ def run_rolling_for_model(model_name, model_cls, model_kwargs):
     all_res = []
     round_idx = 0
     print(f"\n========== 开始 {model_name} 滚动训练（种子{SEED}）==========")
-    prev_model_path = None
     while cur_start + TRAIN_WINDOW + VAL_WINDOW + PREDICT_WINDOW <= total_len:
         round_idx += 1
-        # 新增定义，解决未解析引用
         train_start = cur_start
         train_end = cur_start + TRAIN_WINDOW
         val_start = train_end
         val_end = val_start + VAL_WINDOW
         pred_start = val_end
         pred_end = pred_start + PREDICT_WINDOW
-        print(
-            f"\n第{round_idx}轮 | 训练:{train_start}~{train_end} 验证:{val_start}~{val_end} 预测:{pred_start}~{pred_end}")
+        print(f"\n第{round_idx}轮 | 训练:{train_start}~{train_end} 验证:{val_start}~{val_end} 预测:{pred_start}~{pred_end}")
+        # 传参移除prev_model_path
         model, train_mean, train_std = train_single_round(
             model_cls=model_cls,
             model_kwargs=model_kwargs,
@@ -302,11 +290,8 @@ def run_rolling_for_model(model_name, model_cls, model_kwargs):
             val_start=val_start,
             val_end=val_end,
             round_id=round_idx,
-            model_name=model_name,
-            prev_model_path=prev_model_path
+            model_name=model_name
         )
-
-        prev_model_path = os.path.join(MODEL_SAVE_DIR, f"{model_name}_round{round_idx}_best.zip")
         pred_df = predict_round(model, feat_only, train_mean, train_std, date_col, price_df, pred_start, pred_end)
         all_res.append(pred_df)
         cur_start += PREDICT_WINDOW
@@ -323,14 +308,13 @@ def run_rolling_for_model(model_name, model_cls, model_kwargs):
     print(f"\n【滚动外推最终泛化指标】")
     for k, v in metrics.items():
         print(f"{k}: {v:.4f}")
-    # 导出PPO每日净值，给回测对比脚本读取
     export_df = full_df[["date", "net_value"]].copy()
     export_df.to_csv(r"E:\农行杯\2026\clean\ppo_net_value.csv", index=False, encoding="utf-8-sig")
     print("✅ PPO净值文件已导出至 clean/ppo_net_value.csv")
     return full_df, metrics
 
 def main():
-    run_rolling_for_model("PPO_LSTM", PPO, PPO_KWARGS)
+    run_rolling_for_model("PPO_MLP", PPO, PPO_KWARGS)
     print("\n✅ PPO滚动训练完成！")
 
 if __name__ == "__main__":
