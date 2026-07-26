@@ -4,8 +4,8 @@ import numpy as np
 from portfolio_env import PortfolioEnv
 
 # 1、加载数据集 保留原始完整df（不要删除date列）
-feat_full_df = pd.read_csv("../data/clean/train_total_feature.csv", parse_dates=["date"], encoding="utf-8-sig")
-price_df = pd.read_csv("../data/clean/etf_price_clean.csv", parse_dates=["date"], encoding="utf-8-sig")
+feat_full_df = pd.read_csv("../data/clean/train_total_feature.csv", parse_dates=["date"], encoding="gbk")
+price_df = pd.read_csv("../data/clean/etf_price_clean.csv", parse_dates=["date"], encoding="gbk")
 
 # 给Env用的纯数值特征副本，单独删除date/文本列，不破坏原始完整表
 feat_env_df = feat_full_df.drop(columns=["date"], errors="ignore")
@@ -31,7 +31,7 @@ env_df = pd.DataFrame(env_records)
 env_df["date"] = pd.to_datetime(env_df["date"])
 
 # 3、读取标准打分表
-std_score_df = pd.read_csv("../data/clean/market_score_daily.csv", parse_dates=["date"], encoding="utf-8-sig")
+std_score_df = pd.read_csv("../data/clean/market_score_daily.csv", parse_dates=["date"], encoding="gbk")
 
 # 4、合并两张表，inner交集，打印匹配行数排查是否为空
 compare_df = pd.merge(std_score_df, env_df, on="date", how="inner")
@@ -66,5 +66,5 @@ print(f"趋势分平均绝对误差：{valid_compare['trend_diff'].abs().mean():
 
 # 6、输出到clean文件夹，统一路径
 out_path = "../data/clean/score_cross_compare.csv"
-compare_df.to_csv(out_path, index=False, encoding="utf-8-sig")
+compare_df.to_csv(out_path, index=False, encoding="gbk")
 print(f"\n差异对比文件已输出：{out_path}")
