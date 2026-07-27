@@ -258,4 +258,4 @@ cat results/backtest/baseline_metrics.csv
 
 ---
 
-*最后更新: 2026-07-27（A 网格搜索 + PPO全局加入对比表）
+*最后更新: 2026-07-27（实验完成：7策略对比 + 回撤修复 + 三档风险 + PPO融合联调）
