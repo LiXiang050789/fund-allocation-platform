@@ -32,8 +32,14 @@ COV_WINDOW_EQ = 252             # BL 协方差窗口 (1年交易日)
 ETF_CODES    = ['hs300','zz500','kc50','consume','chip','gold','bond10']
 EQUITY_ETFS  = ['hs300','zz500','kc50','consume','chip']
 HEDGE_ETFS   = ['gold','bond10']
+CSI300_ETF   = 'hs300'  # 沪深300买入持有基准
 EQUITY_INDEXES = [ETF_CODES.index(e) for e in EQUITY_ETFS]
 HEDGE_INDEXES  = [ETF_CODES.index(e) for e in HEDGE_ETFS]
+
+# 北向资金2024-08-19后不可用 (监管停止实时披露)
+NORTH_CUTOFF = pd.Timestamp('2024-08-19')
+# 宏观数据发布滞后: 通过shift(30)模拟月度数据发布延迟 (CPI~T+9, M2~T+15)
+MACRO_LAG = 30
 
 # ============================================================
 # 1. 数据加载
@@ -519,7 +525,23 @@ dates_arr = pd.DatetimeIndex(common_dates)
 prices_mat = prices.loc[common_dates]
 returns_mat = returns.loc[common_dates]
 
+def strategy_csi300(dates):
+    """策略0: 沪深300买入持有 (老师要求增加)"""
+    monthly = get_monthly_rebalance_dates(dates)
+    weights = {}
+    for d in monthly:
+        loc = dates.get_loc(d)
+        avail_mask = mask_available(None, loc)
+        w = np.zeros(7)
+        if avail_mask[ETF_CODES.index(CSI300_ETF)]:
+            w[ETF_CODES.index(CSI300_ETF)] = 1.0
+        else:
+            w[avail_mask] = 1.0 / avail_mask.sum()
+        weights[pd.Timestamp(d)] = w
+    return pd.DataFrame(weights, index=ETF_CODES).T
+
 strategies = [
+    ('沪深300',   strategy_csi300),
     ('等权',      strategy_equal_weight),
     ('风险平价',  strategy_risk_parity),
     ('MVO',       strategy_mvo),
