@@ -48,7 +48,10 @@ def calc_sent_score(margin_change, north_flow):
     else:
         margin_score = 10.0 * (margin_change + 5.0) / 10.0
 
-    if north_flow >= 500:
+    # 北向2024-08后不可用(监管停止实时披露) → NaN时给中性分5分
+    if pd.isna(north_flow) or np.isnan(north_flow):
+        north_score = 5.0
+    elif north_flow >= 500:
         north_score = 10.0
     elif north_flow <= -500:
         north_score = 0.0
@@ -105,7 +108,9 @@ def main():
 
     # PMI 总指数: sf docx 指的是"制造业采购经理指数"（headline PMI），非子指标
     # 当月最后一天可用 → ffill (月度→日频，已是ffill过的，直接用)
-    pmi = df['pmi_制造业采购经理指数'].values
+    pmi_raw = df["pmi_制造业采购经理指数"].values
+    MACRO_LAG = 30
+    pmi = np.roll(pmi_raw, MACRO_LAG); pmi[:MACRO_LAG] = pmi[MACRO_LAG]
 
     # 10Y-2Y利差: 次日可用 → shift(1)
     spread = df['bond_10y_2y_spread'].values
@@ -117,9 +122,12 @@ def main():
     margin_chg = np.roll(margin_chg, 1)
     margin_chg[0] = margin_chg[1]
 
-    # 北向: sf docx 要求"当月累计净流入(亿元)"，north_net 为日度值 → 20日滚动求和近似月度
-    # 次日可用 → shift(1)
-    north_daily = np.nan_to_num(df['north_net'].values, nan=0.0)
+    # 北向: 2024-08-19后监管停止实时披露 → 置NaN (不再用0填充)
+    north_daily = df['north_net'].values.copy()
+    cutoff_idx = np.searchsorted(df['date'].values, np.datetime64('2024-08-19'))
+    if cutoff_idx < len(north_daily):
+        north_daily[cutoff_idx:] = np.nan
+    north_daily = np.nan_to_num(north_daily, nan=np.nan)  # 保持NaN
     north_flow = pd.Series(north_daily).rolling(20, min_periods=1).sum().values
     north_flow = np.roll(north_flow, 1)
     north_flow[0] = north_flow[1]
