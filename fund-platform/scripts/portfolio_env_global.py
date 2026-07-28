@@ -41,6 +41,9 @@ def calc_sent_score(margin_change, north_flow):
         margin_score = 0.0
     else:
         margin_score = 10.0 * (margin_change + 5.0) / 10.0
+    # 北向为空时强制下限
+    if np.isnan(north_flow):
+        north_flow = -500
     if north_flow >= 500:
         north_score = 10.0
     elif north_flow <= -500:
@@ -63,7 +66,7 @@ class PortfolioEnvGlobal(gym.Env):
     metadata = {"render_modes": ["human"]}
 
     def __init__(self, feature_df, price_df, start_idx, end_idx,
-                 window=40, reward_coef=(15.0, 0.01, 0.05, 0.005), temp=None,
+                 window=40, reward_coef=(15.0, 0.01, 0.15, 0.005), temp=None,
                  min_w=0.01, max_w=0.55, trade_cost=0.0003, constraint_coef=10.0):
         super().__init__()
         self.df_raw = feature_df.reset_index(drop=True)
@@ -105,7 +108,7 @@ class PortfolioEnvGlobal(gym.Env):
 
         self.action_space = spaces.Box(low=-5.0, high=5.0, shape=(N_ASSET,), dtype=np.float32)
         self.market_score_dim = 4
-        self.extra_seq_dim = 1 + N_ASSET
+        self.extra_seq_dim = 2 + N_ASSET
         self.obs_dim = self.feature_array.shape[1] + N_ASSET + self.market_score_dim + self.hist_ret_dim + self.extra_seq_dim
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(self.obs_dim,), dtype=np.float32)
 
@@ -115,17 +118,19 @@ class PortfolioEnvGlobal(gym.Env):
         self.ret_queue = deque(maxlen=window)
         self.window_net_cache = deque(maxlen=window)
 
+        # 实例全局打分属性，IDE红线只是静态检测，运行无问题
         self.val_score = 0.0
         self.macro_score = 0.0
         self.sent_score = 0.0
         self.trend_score = 0.0
         self.total_market_score = 0.0
 
-        # 北向资金20日滚动累计
+        # 北向资金20日滚动累计：不足20期为NaN，不在__init__做取值判断
         north_raw = self.feat_np[:, self.col_map["north_net"]]
-        self.north_20roll = pd.Series(np.nan_to_num(north_raw, nan=0.0)).rolling(20, min_periods=1).sum().values
+        north_ser = pd.Series(north_raw)
+        self.north_20roll = north_ser.rolling(20, min_periods=20).sum().values
 
-        # 时序滞后防泄露
+        # 时序滞后防泄露（日频指标1日滞后）
         spread_raw = self.feat_np[:, self.col_map["bond_10y_2y_spread"]]
         margin_raw = self.feat_np[:, self.col_map["margin_5d_chg"]]
         self.spread_shift = np.zeros_like(spread_raw)
@@ -137,6 +142,8 @@ class PortfolioEnvGlobal(gym.Env):
         # 沪深300 MA20
         hs300_series = self.price_df_raw["hs300"]
         self.hs300_ma20_series = hs300_series.rolling(20, min_periods=1).mean().values
+        # 新增：滚动回撤缓存，用于观测特征
+        self.drawdown_cache = deque(maxlen=self.window)
 
     def softmax(self, x):
         x = x / self.temp
@@ -163,6 +170,7 @@ class PortfolioEnvGlobal(gym.Env):
         if np.isnan(hs300_pe):
             hs300_pe = 0.5
 
+        # 只取第0列沪深300价格，标量
         hs300_close = self.price_array[idx][0]
         hs300_ma20 = self.hs300_ma20_series[idx]
 
@@ -234,8 +242,27 @@ class PortfolioEnvGlobal(gym.Env):
         if self.net_value > self.peak_value:
             self.peak_value = self.net_value
         drawdown = (self.net_value / self.peak_value) - 1.0
+        # 新增：记录当期回撤
+        self.drawdown_cache.append(drawdown)
+
+        # ========== 新增1：分散度正向奖励 鼓励均衡持仓 ==========
+        weight_std = np.std(target_weight)
+        diversify_reward = 0.3 * (0.5 - weight_std)
+
+        # ========== 新增2：连续下跌惩罚 ==========
+        # 统计连续多日负收益
+        consecutive_down = 0
+        ret_list = list(self.ret_queue)
+        for r in reversed(ret_list):
+            if r < 0:
+                consecutive_down += 1
+            else:
+                break
+        # 连续下跌越多，惩罚越大
+        down_penalty = 0.02 * consecutive_down
+
         # 回撤阈值0.10
-        dd_penalty = coef_dd * max(0.0, -drawdown - 0.10)
+        dd_penalty = coef_dd * max(0.0, -drawdown - 0.05)
         turn_penalty = coef_turn * turnover
 
         upper_violation = np.sum(np.maximum(0.0, target_weight - self.MAX_W))
@@ -245,8 +272,9 @@ class PortfolioEnvGlobal(gym.Env):
         # 新增打分辅助奖励
         score_reward = 0.5 * (self.total_market_score / 4.0)
 
-        # 总奖励
-        reward = r_sharpe + long_term_reward + score_reward - vol_penalty - cycle_vol_penalty - dd_penalty - turn_penalty - constraint_penalty
+        # 修改后
+        reward = (r_sharpe + long_term_reward + score_reward + diversify_reward
+                  - vol_penalty - cycle_vol_penalty - dd_penalty - turn_penalty - down_penalty)
         reward = np.clip(reward, -5.0, 5.0)
 
         self.last_weight = target_weight.copy()
@@ -290,7 +318,14 @@ class PortfolioEnvGlobal(gym.Env):
             asset_mean_ret = ret_array.mean(axis=0)
         else:
             asset_mean_ret = np.zeros(N_ASSET)
-        extra_seq_feat = np.concatenate([[score_mean], asset_mean_ret])
+        # 新增滚动回撤均值特征
+        if len(self.drawdown_cache) > 0:
+            drawdown_mean = np.mean(list(self.drawdown_cache))
+        else:
+            drawdown_mean = 0.0
+        # 扩展时序特征：score均值 + 资产收益均值 + 滚动回撤均值
+        extra_seq_feat = np.concatenate([[score_mean, drawdown_mean], asset_mean_ret])
+
         obs = np.concatenate([base_obs, extra_seq_feat])
         obs = np.nan_to_num(obs, nan=0.0, posinf=1e3, neginf=-1e3)
 
@@ -312,7 +347,7 @@ class PortfolioEnvGlobal(gym.Env):
         self.window_net_cache.clear()
         self.score_cache.clear()
         self.asset_ret_cache.clear()
-
+        self.drawdown_cache.clear()
         self.vol_ewma = 0.0
         self.peak_value = 1.0
         self.sharpe_rolling = 0.0
