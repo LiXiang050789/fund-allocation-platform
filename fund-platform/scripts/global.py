@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 import sys
 import pandas as pd
-from stable_baselines3 import PPO
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "platform"))
 from stable_baselines3 import PPO
 from stable_baselines3.common.monitor import Monitor
 # 导入全新独立环境，不碰旧文件
@@ -33,23 +33,20 @@ print(f"训练设备：{device}")
 
 # ===================== 路径配置 =====================
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(SCRIPT_DIR, "..", "platform"))
-DATA_PATH = os.path.join(SCRIPT_DIR, "..", "data", "clean", "train_feature_filtered_env.csv")
-PRICE_PATH = os.path.join(SCRIPT_DIR, "..", "data", "clean", "etf_price_clean.csv")
+DATA_PATH = os.path.join(SCRIPT_DIR, "clean", "train_feature_filtered.csv")
+PRICE_PATH = os.path.join(SCRIPT_DIR, "clean", "etf_price_clean.csv")
 
-MODEL_SAVE_DIR = os.path.join(SCRIPT_DIR, "models", "global_ppo")
-RESULT_SAVE_DIR = os.path.join(SCRIPT_DIR, "results", "global_ppo")
-LOG_SAVE_DIR = os.path.join(SCRIPT_DIR, "logs", "global_ppo_log")
-for folder in [MODEL_SAVE_DIR, RESULT_SAVE_DIR, LOG_SAVE_DIR]:
-    os.makedirs(folder, exist_ok=True)
+MODEL_SAVE_DIR = os.path.join(SCRIPT_DIR, "models1", "global_ppo")
+RESULT_SAVE_DIR = os.path.join(SCRIPT_DIR, "results1", "global_ppo")
+LOG_SAVE_DIR = os.path.join(SCRIPT_DIR, "logs1", "global_ppo_log")
 for folder in [MODEL_SAVE_DIR, RESULT_SAVE_DIR, LOG_SAVE_DIR]:
     os.makedirs(folder, exist_ok=True)
 
 # ===================== 全局超参（激进进攻配置） =====================
 RL_WINDOW = 40
 # REWARD_COEF=(15.0,0.01,0.05,0.005)
-# 调整第三项回撤惩罚 0.05 → 0.08
-REWARD_COEF = (15.0, 0.01, 0.08, 0.005)
+REWARD_COEF = (15.0, 0.01, 0.25, 0.005)
+
 
 EPOCH_STEP = 3000
 TRAIN_ITER_NUM = 40
@@ -73,14 +70,14 @@ PPO_KWARGS = {
     }
 }
 
-MAX_WEIGHT = 0.55
+MAX_WEIGHT = 0.4
 MIN_WEIGHT = 0.01
 TRADE_COST = 0.0003
 
 # ===================== 数据加载 & 全局划分 =====================
 def load_full_data():
     feat = pd.read_csv(DATA_PATH, parse_dates=["date"], encoding="utf-8-sig")
-    price = pd.read_csv(PRICE_PATH, parse_dates=["date"], encoding="utf-8-sig")
+    price = pd.read_csv(PRICE_PATH, parse_dates=["date"], encoding="gbk")
     feat = feat.ffill().fillna(0)
     price = price.ffill().fillna(0)
     common_date = set(feat["date"]) & set(price["date"])
