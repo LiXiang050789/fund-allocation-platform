@@ -1,0 +1,22 @@
+Streamlit 平台使用说明
+
+1. 安装依赖
+   pip install -r requirements.txt
+
+2. 启动
+   streamlit run app.py
+
+3. 浏览器打开 http://localhost:8501
+
+4. 问题排查
+   - 如果端口被占用: streamlit run app.py --server.port 8502
+   - 如果浏览器打不开: 终端会显示 Network URL，复制到浏览器
+   - DeepSeek API 需要自己填 key，不填不影响其他功能
+
+5. 数据文件说明
+   data/clean/market_score_daily.csv       — 评分数据(日频)
+   data/results/backtest/baseline_metrics.csv — 8策略对比表
+   data/results/backtest/baseline_nav.csv     — 净值序列
+   data/results/backtest/segmented_backtest.csv — 分段回测
+   data/results/risk_tiers.csv                — 三档风险组合
+   data/results/charts/fig*.png               — 答辩图表
