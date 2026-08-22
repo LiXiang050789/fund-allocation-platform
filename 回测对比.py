@@ -2,13 +2,14 @@
 农行杯赛题一 · 5套基线回测 + PPO强化学习策略 全套统一回测
 纯 numpy/pandas 实现，零外部优化库依赖
 所有策略成本、指标口径完全统一，公平横向对比
+更新：solve_mvo 修改为【最大夏普切点组合解析解】，复用全局RISK_FREE常量
 修正：solve_mvo/solve_risk_parity 返回子集权重，策略函数内回填至7维
 """
 
 import pandas as pd
 import numpy as np
-import warnings, os
-from scipy.optimize import minimize
+import warnings
+import os
 warnings.filterwarnings('ignore')
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -67,7 +68,7 @@ print(f'[数据] 交易日: {len(common_dates)}, {common_dates[0].date()} ~ {com
 print(f'[数据] ETF: {prices.shape[1]}只, 评分状态类型: {sorted(state.dropna().unique())}')
 
 # ============================================================
-# 2. 通用工具函数（修正：仅返回子集权重）
+# 2. 通用工具函数（solve_mvo：最大夏普切点解析解；返回子集权重）
 # ============================================================
 def mask_available(arr, date_idx):
     """返回当日已上市ETF布尔mask"""
@@ -75,19 +76,30 @@ def mask_available(arr, date_idx):
 
 def solve_mvo(mu, cov):
     """
-    最小方差优化，返回仅含有效资产的权重子集
+    最大夏普切点组合（解析解），返回仅含有效资产的权重子集
     mu: 1D array,  cov: 2D array (均为有效资产维度)
     """
     n = len(mu)
     if n == 0:
         return np.array([])
-    def var_obj(w):
-        return 0.5 * w.T @ cov @ w
-    cons = ({'type': 'eq', 'fun': lambda x: np.sum(x) - 1})
-    bnds = [(0, 0.3)] * n
-    init_w = np.ones(n) / n
-    res = minimize(var_obj, init_w, bounds=bnds, constraints=cons)
-    return res.x if res.success else init_w
+    # ==========新增：预期收益率收缩，向均值收缩，抑制权重剧烈跳动==========
+    mu_shrink = 0.6 * mu + 0.4 * np.full_like(mu, mu.mean())
+    excess = mu_shrink - RISK_FREE / 252
+    try:
+        # 正则防止协方差矩阵奇异不可逆
+        cov_inv = np.linalg.inv(cov + np.eye(n) * 1e-6)
+        w = cov_inv @ excess
+        w = w / w.sum()
+    except np.linalg.LinAlgError:
+        # 求逆失败退化为等权
+        w = np.ones(n) / n
+    # 单资产权重裁剪 [0, MAX_WEIGHT]
+    w = np.clip(w, MIN_WEIGHT, MAX_WEIGHT)
+    s = w.sum()
+    if s > 1e-12:
+        w = w / s
+    return w
+
 
 def solve_risk_parity(cov):
     """波动率倒数加权，返回子集权重"""
@@ -307,7 +319,7 @@ def strategy_lgb_fusion(dates):
         eq_active = [i for i in EQUITY_INDEXES if avail_mask[i]]
         hedge_active = [i for i in HEDGE_INDEXES if avail_mask[i]]
         w = np.zeros(7)
-        # 权益部分：LGB预测加权
+        # 权益部分：LGB预测加权 softmax
         if eq_active and target_equity > 0:
             eq_etfs = [ETF_CODES[i] for i in eq_active]
             lgb_loc = lgb_pred.index.get_indexer([d], method='pad')[0]
@@ -363,7 +375,7 @@ def strategy_ppo_daily(dates):
     return ppo_daily
 
 # ============================================================
-# 4. 回测引擎（不变，但权重输入已修正）
+# 4. 回测引擎
 # ============================================================
 def run_backtest(name, weight_df, dates, prices_df, returns_df):
     daily_weights = pd.DataFrame(index=dates, columns=ETF_CODES, data=0.0)
