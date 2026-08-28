@@ -34,7 +34,7 @@ FEATURE_CANDIDATES = [
     os.path.join(BASE, "data", "clean", "train_feature_filtered_env.csv"),
 ]
 PRICE_PATH = os.path.join(BASE, "data", "clean", "etf_price_clean.csv")
-ENV_PATH = os.path.join(REPO_ROOT, "portfolio_env_global.py")
+ENV_PATH = os.path.join(BASE, "platform", "portfolio_env_global.py")
 
 
 def load_env_class():

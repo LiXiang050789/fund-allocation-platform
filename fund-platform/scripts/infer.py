@@ -17,10 +17,11 @@ from portfolio_env_global import PortfolioEnvGlobal
 
 # ---------- 配置参数（与训练脚本 global.py 完全一致） ----------
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_PATH = os.path.join(SCRIPT_DIR, "clean", "train_feature_filtered.csv")
-PRICE_PATH = os.path.join(SCRIPT_DIR, "clean", "etf_price_clean.csv")
-MODEL_PATH = os.path.join(SCRIPT_DIR, "models1", "global_ppo", "global_best.zip")
-WEIGHT_OUTPUT = os.path.join(SCRIPT_DIR, "weight", "ppo_weight.csv")
+BASE = os.path.dirname(SCRIPT_DIR)
+DATA_PATH = os.path.join(BASE, "data", "clean", "train_feature_filtered.csv")
+PRICE_PATH = os.path.join(BASE, "data", "clean", "etf_price_clean.csv")
+MODEL_PATH = os.path.join(BASE, "models", "global_best.zip")
+WEIGHT_OUTPUT = os.path.join(BASE, "results", "ppo_weight.csv")
 
 os.makedirs(os.path.dirname(WEIGHT_OUTPUT), exist_ok=True)
 
