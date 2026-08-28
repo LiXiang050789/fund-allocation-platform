@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Large data backups
+*.bak
+data/clean/*_bak.csv
+
+# Secrets
+*.env
+credentials.*
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Zone identifiers
+*Zone.Identifier
+
+# Conda 环境与包缓存（禁止提交）
+.conda_pkgs/
+.conda_ppo_py312/

@@ -5,16 +5,104 @@ Streamlit 前端 — 5 页 + 动态交互 + DeepSeek API
 import streamlit as st
 import pandas as pd
 import numpy as np
-import os, json, requests
+import os, sys, json, subprocess, requests
 
 st.set_page_config(page_title='指数基金智能配置平台', layout='wide', page_icon='📊')
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO_ROOT = os.path.dirname(BASE)
+PPO_MODEL_PATH = f'{BASE}/models/global_best.zip'
+PPO_FEATURE_PATH = f'{BASE}/data/clean/train_feature_filtered_env.csv'
+PPO_PRICE_PATH = f'{BASE}/data/clean/etf_price_clean.csv'
+PPO_ENV_PATH = f'{REPO_ROOT}/portfolio_env_global.py'
+PPO_WEIGHT_PATH = f'{BASE}/results/ppo_weight.csv'
+PPO_RUNTIME_PATH = f'{BASE}/platform/ppo_infer_runtime.py'
+PPO_PY312_PATH = f'{REPO_ROOT}/.conda_ppo_py312/bin/python'
 
 # ===== 全局配色 =====
 COLORS = {'沪深300':'#607D8B','等权':'#888888','风险平价':'#4CAF50','MVO':'#FF5722','动量':'#2196F3',
           '动态评分':'#E91E63','LGB融合':'#FF9800','PPO全局':'#9C27B0'}
 HIGHLIGHT = {'动态评分','LGB融合'}
+
+ETF_CODES = ['hs300','zz500','kc50','consume','chip','gold','bond10']
+ETF_CN = {
+    'hs300': '沪深300',
+    'zz500': '中证500',
+    'kc50': '科创50',
+    'consume': '消费',
+    'chip': '芯片',
+    'gold': '黄金',
+    'bond10': '十年国债',
+}
+
+# ===== PPO 推理缓存 =====
+RL_WINDOW = 40
+REWARD_COEF = (3.0, 0.18, 1.3, 0.65)
+PPO_EXPERIMENT_CFG = {
+    'rebalance_monthly': False,
+    'enable_bond_regime_reward': False,
+    'enable_bond_loss_couple': True,
+    'enable_ladder_dd': True,
+    'enable_min_bond_hard_constraint': True,
+    'enable_reward_norm': True,
+    'enable_lgb_pred_obs': False,
+}
+
+def _format_ppo_weights(weight_map):
+    return '、'.join([f'{ETF_CN[k]} {weight_map[k]*100:.1f}%' for k in ETF_CODES])
+
+def _load_cached_ppo_weight(as_of_date, reason=''):
+    if not os.path.exists(PPO_WEIGHT_PATH):
+        return {'ok': False, 'message': 'PPO 模型未部署，当前仅使用市场评分'}
+    weight_df = pd.read_csv(PPO_WEIGHT_PATH, encoding='utf-8-sig', parse_dates=['date'])
+    weight_df = weight_df.sort_values('date')
+    weight_df = weight_df[weight_df['date'] <= pd.Timestamp(as_of_date)]
+    if weight_df.empty:
+        return {'ok': False, 'message': 'PPO 权重无有效日期，当前仅使用市场评分'}
+    row = weight_df.iloc[-1]
+    weight_map = {code: float(row[code]) for code in ETF_CODES}
+    message = f'PPO 实时推理不可用，已使用最近一次离线权重：{reason}' if reason else ''
+    return {
+        'ok': True,
+        'date': pd.Timestamp(row['date']),
+        'weights': weight_map,
+        'text': f'PPO 模型今日推荐配置：{_format_ppo_weights(weight_map)}',
+        'source': 'cached_weight',
+        'message': message,
+    }
+
+@st.cache_data(show_spinner=False)
+def infer_latest_ppo_weight(as_of_date):
+    if not os.path.exists(PPO_MODEL_PATH):
+        return {'ok': False, 'message': 'PPO 模型未部署，当前仅使用市场评分'}
+
+    try:
+        proc = subprocess.run(
+            [PPO_PY312_PATH if os.path.exists(PPO_PY312_PATH) else sys.executable,
+             PPO_RUNTIME_PATH, str(pd.Timestamp(as_of_date).date())],
+            cwd=REPO_ROOT,
+            text=True,
+            capture_output=True,
+            timeout=120,
+        )
+        if proc.returncode != 0:
+            detail = (proc.stderr or proc.stdout or f'exit {proc.returncode}')[-200:]
+            return _load_cached_ppo_weight(as_of_date, detail)
+
+        payload = json.loads(proc.stdout.strip().splitlines()[-1])
+        weight_map = {code: float(payload['weights'][code]) for code in ETF_CODES}
+        return {
+            'ok': True,
+            'date': pd.Timestamp(payload['date']),
+            'weights': weight_map,
+            'text': f'PPO 模型今日推荐配置：{_format_ppo_weights(weight_map)}',
+            'source': payload.get('source', 'live_inference'),
+            'message': payload.get('message', ''),
+        }
+    except subprocess.TimeoutExpired:
+        return _load_cached_ppo_weight(as_of_date, '实时推理超时')
+    except Exception as e:
+        return _load_cached_ppo_weight(as_of_date, str(e))
 
 # ===== 数据缓存 =====
 @st.cache_data
@@ -178,21 +266,41 @@ with tab3:
 with tab4:
     st.header('AI 投顾助手')
 
+    ppo_info = infer_latest_ppo_weight(latest['date'])
+    if ppo_info['ok']:
+        source_label = '实时推理' if ppo_info.get('source') == 'live_inference' else '离线权重兜底'
+        st.caption(f"{ppo_info['text']}（{source_label}，权重日期 {ppo_info['date'].date()}）")
+        if ppo_info.get('message'):
+            st.caption(ppo_info['message'])
+    else:
+        if '未部署' in ppo_info['message']:
+            st.warning('PPO 模型未部署，当前仅使用市场评分')
+        else:
+            st.caption(ppo_info['message'])
+
     mode = st.radio('模式', ['🎯 预制场景', '💬 实时问答 (DeepSeek)'], horizontal=True)
 
     if mode == '🎯 预制场景':
+        ppo_scene_text = (
+            f'\n\n当前 {ppo_info["text"]}。'
+            if ppo_info['ok']
+            else '\n\n当前无 PPO 权重，仅基于市场评分回答。'
+        )
         scenarios = {
             '😱 市场大跌怎么办': ('恐慌安抚',
                 f'看到账户浮亏确实让人不安。当前市场评分 **{latest["total_score"]:.0f} 分（{latest["market_state"]}）**。\n\n'
                 f'估值维度 **{latest["val_score"]:.0f}/25**，宏观维度 **{latest["macro_score"]:.0f}/25**。\n\n'
-                '市场处于恐慌区间时，往往是长线布局的窗口。动态评分系统建议维持防御性仓位，等待评分回升后再逐步加仓。'),
+                '市场处于恐慌区间时，往往是长线布局的窗口。动态评分系统建议维持防御性仓位，等待评分回升后再逐步加仓。'
+                + ppo_scene_text),
             '🔥 现在该加仓吗': ('过热止盈',
                 f'当前市场评分 **{latest["total_score"]:.0f} 分（{latest["market_state"]}）**。\n\n'
-                '评分超过 60 时市场偏强，建议适度参与但不追高。2015 股灾和 2018 熊市中验证了"过热时降低仓位"的价值。'),
+                '评分超过 60 时市场偏强，建议适度参与但不追高。2015 股灾和 2018 熊市中验证了"过热时降低仓位"的价值。'
+                + ppo_scene_text),
             '📅 定投还有用吗': ('长期定投',
                 '定投的核心优势是"用时间分散买入成本"。\n\n'
                 '回测显示：2021 年后 1307 天震荡期，等权仅赚 10%，动态评分配置实现 33% 收益——\n'
-                '"市场状态分类 + 定投纪律"在长期中显著跑赢被动持有。'),
+                '"市场状态分类 + 定投纪律"在长期中显著跑赢被动持有。'
+                + ppo_scene_text),
         }
         col_scene, col_chat = st.columns([1, 2])
         with col_scene:
@@ -215,6 +323,7 @@ with tab4:
             system_prompt = f"""你是一个智能投顾助手，为农行客户提供资产配置建议。
 当前市场环境: 评分 {latest['total_score']:.0f}/100，状态 {latest['market_state']}。
 估值{latest['val_score']:.0f}/25，宏观{latest['macro_score']:.0f}/25，情绪{latest['sent_score']:.0f}/20，趋势{latest['trend_score']:.0f}/30。
+{ppo_info['text'] if ppo_info['ok'] else '无 PPO 权重，仅基于市场评分回答。'}
 资产池: 沪深300/中证500/科创50/消费/芯片/黄金/十年国债 (7只ETF)。
 策略: 动态评分配置(年化19.8%/-16.5%回撤)，LGB融合(年化12.4%/夏普0.66)。
 回答要简洁专业，不生成具体投资建议。"""
