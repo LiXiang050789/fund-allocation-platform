@@ -12,7 +12,7 @@ st.set_page_config(page_title='指数基金智能配置平台', layout='wide', p
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPO_ROOT = os.path.dirname(BASE)
 PPO_MODEL_PATH = f'{BASE}/models/global_best.zip'
-PPO_FEATURE_PATH = f'{BASE}/data/clean/train_feature_filtered_env.csv'
+PPO_FEATURE_PATH = f'{BASE}/data/clean/train_feature_filtered_ppo.csv'  # 仅作提示，实际推理路径见 ppo_infer_runtime.py
 PPO_PRICE_PATH = f'{BASE}/data/clean/etf_price_clean.csv'
 PPO_ENV_PATH = f'{BASE}/platform/portfolio_env_global.py'
 PPO_WEIGHT_PATH = f'{BASE}/results/ppo_weight.csv'

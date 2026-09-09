@@ -18,7 +18,7 @@ from portfolio_env_global import PortfolioEnvGlobal
 # ---------- 配置参数（与训练脚本 global.py 完全一致） ----------
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE = os.path.dirname(SCRIPT_DIR)
-DATA_PATH = os.path.join(BASE, "data", "clean", "train_feature_filtered.csv")
+DATA_PATH = os.path.join(BASE, "data", "clean", "train_feature_filtered_ppo.csv")
 PRICE_PATH = os.path.join(BASE, "data", "clean", "etf_price_clean.csv")
 MODEL_PATH = os.path.join(BASE, "models", "global_best.zip")
 WEIGHT_OUTPUT = os.path.join(BASE, "results", "ppo_weight.csv")

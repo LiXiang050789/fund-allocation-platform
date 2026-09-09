@@ -360,6 +360,7 @@ def strategy_ppo_monthly(dates):
     ppo_daily = pd.read_csv(PPO_WEIGHT_PATH, parse_dates=["date"])
     ppo_daily = ppo_daily.set_index("date")
     ppo_daily = ppo_daily.reindex(dates).ffill().fillna(0)
+    ppo_daily = apply_listed_mask_to_weights(ppo_daily, dates)
     monthly_dates = get_monthly_rebalance_dates(dates)
     ppo_monthly = ppo_daily.loc[monthly_dates]
     return ppo_monthly
@@ -371,7 +372,21 @@ def strategy_ppo_daily(dates):
     ppo_daily = pd.read_csv(PPO_WEIGHT_PATH, parse_dates=["date"])
     ppo_daily = ppo_daily.set_index("date")
     ppo_daily = ppo_daily.reindex(dates).ffill().fillna(0)
+    ppo_daily = apply_listed_mask_to_weights(ppo_daily, dates)
     return ppo_daily
+
+def apply_listed_mask_to_weights(weight_df, dates):
+    """按上市状态清零不可用ETF权重，并对可用权重重新归一化。"""
+    masked = weight_df.reindex(dates).copy()
+    available = avail.reindex(dates).astype(bool)
+    masked = masked.where(available, 0.0)
+    row_sums = masked.sum(axis=1)
+    zero_rows = row_sums <= 1e-12
+    masked = masked.div(row_sums.where(~zero_rows, 1.0), axis=0)
+    if zero_rows.any():
+        fallback = available.div(available.sum(axis=1).where(available.sum(axis=1) > 0, 1.0), axis=0)
+        masked.loc[zero_rows] = fallback.loc[zero_rows]
+    return masked[ETF_CODES]
 
 # ============================================================
 # 4. 回测引擎

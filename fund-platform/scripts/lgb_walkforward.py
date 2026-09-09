@@ -1,5 +1,5 @@
 """
-LightGBM Walk-Forward — 每 ETF 独立模型，日频预测 60 日收益，月度 MVO 回测
+LightGBM Walk-Forward — 每 ETF 独立模型，日频预测 21 日收益，月度 MVO 回测
 """
 import pandas as pd, numpy as np, lightgbm as lgb, os, warnings
 warnings.filterwarnings('ignore')
@@ -160,4 +160,4 @@ except: pass
 print(f'    {"LGB":6s}  年化={ann_ret*100:5.1f}%  回撤={mdd*100:5.1f}%  夏普={sharpe:.3f}  卡玛={calmar:.3f}  ← 独立模型')
 
 pred_daily.to_csv(f'{BASE}/results/pred_return_lgb_daily.csv', encoding='utf-8-sig')
-print(f'\n✅ 60日预测 → results/pred_return_lgb_daily.csv')
+print(f'\n✅ 21日预测 → results/pred_return_lgb_daily.csv')

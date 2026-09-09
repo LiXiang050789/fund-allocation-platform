@@ -6,7 +6,7 @@ from collections import deque
 
 ASSET_NAMES = ["hs300", "zz500", "kc50", "consume", "chip", "gold", "bond10"]
 N_ASSET = len(ASSET_NAMES)
-N_EQUITY = N_ASSET - 1  # 前6只为权益，最后1只为国债
+N_EQUITY = N_ASSET - 1  # 前6只为非债资产(含权益与黄金)，最后1只为国债
 BOND_IDX = -1
 DEFAULT_SOFTMAX_TEMP = 0.6
 ANNUAL_DAYS = 252

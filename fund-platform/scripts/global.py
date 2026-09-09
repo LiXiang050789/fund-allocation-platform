@@ -52,7 +52,7 @@ print(f"训练设备：{device}")
 # ===================== 路径配置（统一拼接，消除硬编码路径） =====================
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 BASE = os.path.dirname(SCRIPT_DIR)
-DATA_PATH = os.path.join(BASE, "data", "clean", "train_feature_filtered.csv")
+DATA_PATH = os.path.join(BASE, "data", "clean", "train_feature_filtered_ppo.csv")
 PRICE_PATH = os.path.join(BASE, "data", "clean", "etf_price_clean.csv")
 EXPORT_CSV_PATH = os.path.join(BASE, "results", "ppo_net_global.csv")
 
