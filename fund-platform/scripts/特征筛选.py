@@ -98,26 +98,24 @@ def encode_text_market(df: pd.DataFrame, text_cols: list) -> pd.DataFrame:
     return df_new
 
 
-def shift_monthly_feature(df: pd.DataFrame, month_feats: list, date_col="date"):
+def shift_monthly_feature(df: pd.DataFrame, month_feats: list, date_col="date", fallback_means=None):
     df_new = df.copy()
     df_new["year_month"] = df_new[date_col].dt.to_period("M")
     month_map_all = {}
     month_mean_fill = {}
-    # 按月分组取当月指标值，采用第一个有效滞后月份均值填充首月缺失（彻底杜绝时序泄露）
+    fallback_means = fallback_means or {}
+    # 按月分组取当月指标值；首月无滞后值时用训练期内可见的有效值兜底。
     for feat in month_feats:
         month_val_map = {}
-        unique_yms = sorted(df_new["year_month"].unique())
-        # 取第一个存在上月数据的月份作为填充基准
-        if len(unique_yms) >= 2:
-            fill_base_ym = unique_yms[1]
-        else:
-            fill_base_ym = unique_yms[0]
-        base_group = df_new[df_new["year_month"] == fill_base_ym]
-        base_mean = base_group[feat].mean()
 
         for ym, group in df_new.groupby("year_month"):
             val = group[feat].iloc[0]
             month_val_map[ym] = val
+        if feat in fallback_means and not pd.isna(fallback_means[feat]):
+            base_mean = fallback_means[feat]
+        else:
+            valid_month_vals = pd.Series(month_val_map).dropna()
+            base_mean = valid_month_vals.iloc[0] if len(valid_month_vals) > 0 else df_new[feat].mean()
         month_map_all[feat] = month_val_map
         month_mean_fill[feat] = base_mean
 
@@ -286,11 +284,13 @@ def main():
     print(f"训练集区间：{df_train_raw['date'].min()} ~ {df_train_raw['date'].max()}")
 
     # 月度滞后处理（修复均值泄露）
-    df_train_month, train_month_map, train_month_mean = shift_monthly_feature(df_train_raw, MONTHLY_MACRO_FEATS)
-    df_full_raw = df_full_raw_all.copy()
-    df_full_raw["year_month"] = df_full_raw["date"].dt.to_period("M")
+    _, _, train_month_mean = shift_monthly_feature(df_train_raw, MONTHLY_MACRO_FEATS)
+    df_full_raw, _, _ = shift_monthly_feature(
+        df_full_raw_all,
+        MONTHLY_MACRO_FEATS,
+        fallback_means=train_month_mean
+    )
     for feat in MONTHLY_MACRO_FEATS:
-        df_full_raw[f"{feat}_shift_month"] = df_full_raw["year_month"].map(train_month_map[feat]).fillna(train_month_mean[feat])
         df_full_raw[feat] = df_full_raw[f"{feat}_shift_month"]
         df_full_raw.drop(f"{feat}_shift_month", axis=1, inplace=True)
     df_full_raw.drop(columns=["year_month"], inplace=True)
