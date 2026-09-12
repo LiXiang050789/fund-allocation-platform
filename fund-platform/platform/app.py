@@ -229,8 +229,11 @@ def load_data():
 
 @st.cache_data(show_spinner=False)
 def load_strategy_metrics():
-    baseline = pd.read_csv(f"{BASE}/results/backtest/baseline_metrics.csv", encoding="utf-8-sig")
-    all_strategy = pd.read_csv(f"{BASE}/results/backtest/all_strategy_metrics.csv", encoding="utf-8-sig")
+    fallback_columns = ["策略", "年化收益", "年化波动", "夏普比率", "索提诺比率", "最大回撤", "卡玛比率", "月均换手率", "权重集中度HHI", "胜率", "95%VaR", "年化收益/最大回撤"]
+    baseline, _ = _safe_read_csv(f"{BASE}/results/backtest/baseline_metrics.csv")
+    all_strategy, _ = _safe_read_csv(f"{BASE}/results/backtest/all_strategy_metrics.csv")
+    if baseline is None or all_strategy is None:
+        return pd.DataFrame(columns=fallback_columns)
     ppo_rows = all_strategy[all_strategy["策略"].isin(["PPO月度", "PPO原生日频"])].copy()
     ppo_rows = _add_return_drawdown_ratio(ppo_rows)
     for col in baseline.columns:
@@ -241,7 +244,9 @@ def load_strategy_metrics():
 
 @st.cache_data(show_spinner=False)
 def load_unified_metrics():
-    metrics = pd.read_csv(f"{BASE}/results/backtest/all_strategy_metrics.csv", encoding="utf-8-sig")
+    metrics, _ = _safe_read_csv(f"{BASE}/results/backtest/all_strategy_metrics.csv")
+    if metrics is None:
+        return pd.DataFrame(columns=["策略", "年化收益", "年化波动", "夏普比率", "索提诺比率", "最大回撤", "卡玛比率", "月均换手率", "权重集中度HHI", "胜率", "95%VaR", "年化收益/最大回撤"])
     return _add_return_drawdown_ratio(metrics)
 
 
@@ -376,18 +381,20 @@ with tab2:
     st.header("9 套策略全期对比 (2015-2026)")
     st.caption("7 套为基线口径（与项目书/PPT 一致）；PPO月度/PPO原生日频为统一回测引擎口径，月度版与其他策略调仓频率对齐，日频版为模型原生输出对照。")
 
-    all_strategies = metrics_all["策略"].tolist()
-    default_selected = ["沪深300", "等权", "动态评分", "LGB融合", "PPO月度"]
-    selected = st.multiselect("筛选策略", all_strategies, default=default_selected)
-    filtered = metrics_all[metrics_all["策略"].isin(selected)]
-
     def highlight_best(row):
         if row["策略"] in HIGHLIGHT:
             return ["background-color: rgba(233,30,99,0.08)"] * len(row)
         return [""] * len(row)
 
     format_dict = {"年化收益": "{:.1%}", "最大回撤": "{:.1%}", "夏普比率": "{:.2f}", "卡玛比率": "{:.2f}", "月均换手率": "{:.1%}", "年化收益/最大回撤": "{:.2f}"}
-    st.dataframe(filtered.style.format(format_dict, na_rep="—").apply(highlight_best, axis=1), use_container_width=True, height=350)
+    if metrics_all.empty:
+        st.warning("策略指标文件读取失败，当前仅展示页面结构。")
+    else:
+        all_strategies = metrics_all["策略"].tolist()
+        default_selected = [item for item in ["沪深300", "等权", "动态评分", "LGB融合", "PPO月度"] if item in all_strategies]
+        selected = st.multiselect("筛选策略", all_strategies, default=default_selected)
+        filtered = metrics_all[metrics_all["策略"].isin(selected)]
+        st.dataframe(filtered.style.format(format_dict, na_rep="—").apply(highlight_best, axis=1), use_container_width=True, height=350)
 
     st.subheader("策略净值对比")
     st.image(f"{BASE}/results/charts/fig1_nav_comparison.png", use_container_width=True)
@@ -465,7 +472,7 @@ def _clean_table_shape(path):
 
 
 @st.cache_data(show_spinner=False)
-def _pipeline_counts():
+def _pipeline_counts(signature):
     raw_files = sum(len(files) for _, _, files in os.walk(RAW_DIR)) if os.path.isdir(RAW_DIR) else 0
     clean_dir = os.path.join(BASE, "data", "clean")
     clean_csvs = len([name for name in os.listdir(clean_dir) if name.endswith(".csv")]) if os.path.isdir(clean_dir) else 0
@@ -503,8 +510,10 @@ def _script_head(path, n=100):
 
 @st.cache_data(show_spinner=False)
 def _lgb_annual_ic():
-    pred = pd.read_csv(f"{BASE}/results/pred_return_lgb_daily.csv", encoding="utf-8-sig", parse_dates=["date"])
-    price = pd.read_csv(PPO_PRICE_PATH, encoding="utf-8-sig", parse_dates=["date"])
+    pred, _ = _safe_read_csv(f"{BASE}/results/pred_return_lgb_daily.csv", parse_dates=["date"])
+    price, _ = _safe_read_csv(PPO_PRICE_PATH, parse_dates=["date"])
+    if pred is None or price is None:
+        return {}
     future = price.set_index("date")[ETF_CODES].shift(-21) / price.set_index("date")[ETF_CODES] - 1
     future = future.reset_index()
     merged = pred.merge(future, on="date", suffixes=("_pred", "_ret"))
@@ -537,7 +546,8 @@ with tab_pipeline:
     chip_cols[1].info("清洗·特征·建模·回测：读取真实产物")
     chip_cols[2].success("PPO 推理：可执行")
 
-    scan = _scan_pipeline_assets(_pipeline_signature())
+    pipeline_signature = _pipeline_signature()
+    scan = _scan_pipeline_assets(pipeline_signature)
     file_ready = sum(1 for _, _, ok in scan["checks"] if ok)
     semantic_ready = sum(1 for _, ok in scan["semantics"] if ok)
     st.subheader(f"文件 {file_ready}/12 · 就绪校验 {semantic_ready}/3")
@@ -553,7 +563,7 @@ with tab_pipeline:
     if failed:
         st.error("未通过项：" + "、".join(failed))
 
-    raw_files, clean_csvs = _pipeline_counts()
+    raw_files, clean_csvs = _pipeline_counts(pipeline_signature)
     train_total_shape = _clean_table_shape(f"{BASE}/data/clean/train_total_feature.csv")
     lgb_shape = _clean_table_shape(f"{BASE}/data/clean/train_feature_filtered.csv")
     ppo_shape = _clean_table_shape(PPO_FEATURE_PATH)
@@ -596,7 +606,8 @@ with tab_pipeline:
                 st.warning("data/raw 暂无可扫描文件")
         if b3.button("重新扫描本地产物", use_container_width=True):
             _scan_pipeline_assets.clear()
-            st.success("已重新扫描本地产物")
+            _pipeline_counts.clear()
+            st.rerun()
 
     with st.expander("② 清洗层：主表规模", expanded=False):
         clean_summary = pd.DataFrame(
@@ -659,7 +670,10 @@ with tab_pipeline:
 
     with st.expander("⑤ 统一回测证据区", expanded=False):
         unified = load_unified_metrics()
-        st.dataframe(unified.style.format(format_dict, na_rep="—"), use_container_width=True, hide_index=True)
+        if unified.empty:
+            st.warning("统一回测指标文件读取失败，当前跳过指标表展示。")
+        else:
+            st.dataframe(unified.style.format(format_dict, na_rep="—"), use_container_width=True, hide_index=True)
         nav_all, _ = _safe_read_csv(f"{BASE}/results/backtest/all_strategy_nav.csv", parse_dates=["date"])
         if nav_all is not None:
             fig_nav = go.Figure()
@@ -667,6 +681,8 @@ with tab_pipeline:
                 fig_nav.add_trace(go.Scatter(x=nav_all["date"], y=nav_all[col], mode="lines", name=col, line=dict(color=COLORS.get(col))))
             fig_nav.update_layout(height=420, margin=dict(t=20, b=20), yaxis_title="净值")
             st.plotly_chart(fig_nav, use_container_width=True)
+        else:
+            st.warning("统一回测净值文件读取失败，当前跳过净值图展示。")
         st.caption("统一回测引擎口径")
         m1, m2, m3 = st.columns(3)
         m1.metric("滑点", "0.0005")
