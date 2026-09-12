@@ -133,6 +133,9 @@ def infer(as_of_date):
     return {
         "date": str(last_date.date()),
         "weights": {code: float(last_weight[i]) for i, code in enumerate(ETF_CODES)},
+        "n_features": int(feat_norm.shape[1]),
+        "model_obs_dim": int(model.observation_space.shape[0]),
+        "steps": int(step_idx + 1),
     }
 
 
