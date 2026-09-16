@@ -448,6 +448,13 @@ def _latest_raw_mtime():
     return os.path.relpath(latest_file, BASE), pd.Timestamp.fromtimestamp(latest_mtime)
 
 
+def _pipeline_script_path(name):
+    for candidate in (os.path.join(REPO_ROOT, name), os.path.join(BASE, "scripts", name)):
+        if os.path.exists(candidate):
+            return candidate
+    return os.path.join(REPO_ROOT, name)
+
+
 def _script_head(path, n=100):
     try:
         with open(path, "r", encoding="utf-8") as fh:
@@ -546,7 +553,7 @@ with tab_pipeline:
         b1, b2, b3 = st.columns(3)
         if b1.button("查看采集脚本", use_container_width=True):
             for script in ["爬取数据.py", "补充数据挖取.py"]:
-                path = os.path.join(REPO_ROOT, script)
+                path = _pipeline_script_path(script)
                 st.code(_script_head(path, 100), language="python")
                 st.caption(f"完整脚本已入库：{path}")
         if b2.button("查看最近采集产物", use_container_width=True):
