@@ -1,0 +1,39 @@
+{
+  "name": "H_equity_residual_45",
+  "min_bond_weight": 0.05,
+  "action_bound": 5.0,
+  "min_w": 0.01,
+  "max_w": 0.25,
+  "trade_cost": 0.0003,
+  "reward_mode": "excess_rule",
+  "reward_coef": [
+    10.0,
+    0.5,
+    0.0,
+    1.0
+  ],
+  "train_start_offset": 0,
+  "train_end_frac": 0.75,
+  "val_end_frac": 0.9,
+  "ent_coef": 0.12,
+  "learning_rate": 5e-05,
+  "n_steps": 1024,
+  "batch_size": 128,
+  "gamma": 0.99,
+  "clip_range": 0.2,
+  "max_grad_norm": 0.5,
+  "net_arch": [
+    128,
+    64
+  ],
+  "rebalance_monthly": false,
+  "enable_min_bond_hard_constraint": true,
+  "enable_reward_norm": false,
+  "enable_bond_regime_reward": false,
+  "enable_bond_loss_couple": false,
+  "enable_ladder_dd": false,
+  "enable_lgb_pred_obs": false,
+  "enable_residual": false,
+  "enable_equity_only": true,
+  "residual_scale": 0.15
+}
