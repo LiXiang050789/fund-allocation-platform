@@ -219,11 +219,8 @@ def _add_return_drawdown_ratio(df):
 @st.cache_data(show_spinner=False)
 def load_data():
     score = pd.read_csv(f"{BASE}/data/clean/market_score_daily.csv", encoding="utf-8-sig", parse_dates=["date"])
-    metrics = pd.read_csv(f"{BASE}/results/backtest/baseline_metrics.csv", encoding="utf-8-sig")
-    nav = pd.read_csv(f"{BASE}/results/backtest/baseline_nav.csv", encoding="utf-8-sig", parse_dates=["date"])
-    seg = pd.read_csv(f"{BASE}/results/backtest/segmented_backtest.csv", encoding="utf-8-sig")
     tiers = pd.read_csv(f"{BASE}/results/risk_tiers.csv", encoding="utf-8-sig")
-    return score, metrics, nav, seg, tiers
+    return score, tiers
 
 
 @st.cache_data(show_spinner=False)
@@ -234,7 +231,7 @@ def load_unified_metrics():
     return _add_return_drawdown_ratio(metrics)
 
 
-score_df, metrics_df, nav_df, seg_df, tiers_df = load_data()
+score_df, tiers_df = load_data()
 latest = score_df.iloc[-1]
 DATA_DATE_MIN = score_df["date"].min().date()
 DATA_DATE_MAX = score_df["date"].max().date()
