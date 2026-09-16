@@ -37,8 +37,6 @@ COLORS = {
     "PPO月度": "#9C27B0",
     "PPO原生日频": "#673AB7",
 }
-HIGHLIGHT = {"动态评分", "LGB融合", "PPO月度"}
-
 ETF_CODES = ["hs300", "zz500", "kc50", "consume", "chip", "gold", "bond10"]
 ETF_CN = {
     "hs300": "沪深300",
@@ -49,6 +47,7 @@ ETF_CN = {
     "gold": "黄金",
     "bond10": "十年国债",
 }
+format_dict = {"年化收益": "{:.1%}", "最大回撤": "{:.1%}", "夏普比率": "{:.2f}", "卡玛比率": "{:.2f}", "月均换手率": "{:.1%}", "年化收益/最大回撤": "{:.2f}"}
 
 
 def resolve_ppo_python():
@@ -228,21 +227,6 @@ def load_data():
 
 
 @st.cache_data(show_spinner=False)
-def load_strategy_metrics():
-    fallback_columns = ["策略", "年化收益", "年化波动", "夏普比率", "索提诺比率", "最大回撤", "卡玛比率", "月均换手率", "权重集中度HHI", "胜率", "95%VaR", "年化收益/最大回撤"]
-    baseline, _ = _safe_read_csv(f"{BASE}/results/backtest/baseline_metrics.csv")
-    all_strategy, _ = _safe_read_csv(f"{BASE}/results/backtest/all_strategy_metrics.csv")
-    if baseline is None or all_strategy is None:
-        return pd.DataFrame(columns=fallback_columns)
-    ppo_rows = all_strategy[all_strategy["策略"].isin(["PPO月度", "PPO原生日频"])].copy()
-    ppo_rows = _add_return_drawdown_ratio(ppo_rows)
-    for col in baseline.columns:
-        if col not in ppo_rows.columns:
-            ppo_rows[col] = np.nan
-    return pd.concat([baseline, ppo_rows[baseline.columns]], ignore_index=True)
-
-
-@st.cache_data(show_spinner=False)
 def load_unified_metrics():
     metrics, _ = _safe_read_csv(f"{BASE}/results/backtest/all_strategy_metrics.csv")
     if metrics is None:
@@ -251,7 +235,6 @@ def load_unified_metrics():
 
 
 score_df, metrics_df, nav_df, seg_df, tiers_df = load_data()
-metrics_all = load_strategy_metrics()
 latest = score_df.iloc[-1]
 DATA_DATE_MIN = score_df["date"].min().date()
 DATA_DATE_MAX = score_df["date"].max().date()
@@ -327,8 +310,8 @@ with st.sidebar:
     st.caption("数据源: sf四维评分规则 + 北向NaN + 宏观滞后修正")
 
 
-tab1, tab2, tab_pipeline, tab3, tab4, tab5 = st.tabs(
-    ["📈 市场仪表盘", "📊 策略对比", "⚙️ 自动化数据流水线", "🎯 配置推荐", "🤖 AI助手", "🛡️ 风险划分"]
+tab1, tab_pipeline, tab3, tab4, tab5 = st.tabs(
+    ["📈 市场仪表盘",  "⚙️ 自动化数据流水线", "🎯 配置推荐", "🤖 AI助手", "🛡️ 风险划分"]
 )
 
 
@@ -375,34 +358,6 @@ with tab1:
         cnt = dist.get(state, 0)
         pct = cnt / len(score_df) * 100
         cols[i].metric(state, f"{cnt}天", f"{pct:.1f}%")
-
-
-with tab2:
-    st.header("9 套策略全期对比 (2015-2026)")
-    st.caption("7 套为基线口径（与项目书/PPT 一致）；PPO月度/PPO原生日频为统一回测引擎口径，月度版与其他策略调仓频率对齐，日频版为模型原生输出对照。")
-
-    def highlight_best(row):
-        if row["策略"] in HIGHLIGHT:
-            return ["background-color: rgba(233,30,99,0.08)"] * len(row)
-        return [""] * len(row)
-
-    format_dict = {"年化收益": "{:.1%}", "最大回撤": "{:.1%}", "夏普比率": "{:.2f}", "卡玛比率": "{:.2f}", "月均换手率": "{:.1%}", "年化收益/最大回撤": "{:.2f}"}
-    if metrics_all.empty:
-        st.warning("策略指标文件读取失败，当前仅展示页面结构。")
-    else:
-        all_strategies = metrics_all["策略"].tolist()
-        default_selected = [item for item in ["沪深300", "等权", "动态评分", "LGB融合", "PPO月度"] if item in all_strategies]
-        selected = st.multiselect("筛选策略", all_strategies, default=default_selected)
-        filtered = metrics_all[metrics_all["策略"].isin(selected)]
-        st.dataframe(filtered.style.format(format_dict, na_rep="—").apply(highlight_best, axis=1), use_container_width=True, height=350)
-
-    st.subheader("策略净值对比")
-    st.image(f"{BASE}/results/charts/fig1_nav_comparison.png", use_container_width=True)
-    st.caption("图示为基线 7 套净值；PPO 两行见上表。")
-
-    st.subheader("分段回测")
-    st.image(f"{BASE}/results/charts/fig2_segmented_backtest.png", use_container_width=True)
-    st.caption("图示为基线 7 套分段；PPO 两行见上表。")
 
 
 def _file_mtime(path):
@@ -578,7 +533,7 @@ with tab_pipeline:
     st.subheader("六环节链路")
     cards = st.columns(6)
     card_text = [
-        ("① 采集", f"{raw_files} 文件\n\n🟢 爬虫脚本（仅代码展示）\n\n🟡 理杏仁人工导出 kc50·consume·chip\n\n⚪ 手工 数据汇总.xlsx"),
+        ("① 采集", f"{raw_files} 文件\n\n爬虫脚本（仅代码展示）\n\n理杏仁人工导出 kc50·consume·chip\n\n手工 数据汇总.xlsx"),
         ("② 清洗", f"{clean_csvs} CSV\n\n六主表行列现读\n\nETF价格 {_clean_table_shape(PPO_PRICE_PATH)}"),
         ("③ 特征", f"182 → 37/44\n\nIC≥0.022 / r≤0.92 / 累积0.88\n\nTop1 {top_feature}"),
         ("④ 建模", f"LGB有效预测 {pred_count} 条\n\nPPO模型 global_best.zip\n\n44 维特征 {ppo_shape}"),
@@ -688,6 +643,9 @@ with tab_pipeline:
         m1.metric("滑点", "0.0005")
         m2.metric("双边费", "0.001")
         m3.metric("单资产上限", "0.30")
+        st.markdown("**分段回测（6 阶段）**")
+        st.image(f"{BASE}/results/charts/fig2_segmented_backtest.png", use_container_width=True)
+        st.caption("分段回测图为基线口径（与项目书/PPT 同图）；本区上方的指标表与净值图为统一回测引擎口径。")
 
     with st.expander("⑥ 调仓建议：PPO 权重与校验", expanded=False):
         ppo_info = _current_ppo_info(latest["date"])
