@@ -541,7 +541,7 @@ with tab_pipeline:
         ("② 清洗", f"{clean_csvs} CSV\n\n六主表行列现读\n\nETF价格 {_clean_table_shape(PPO_PRICE_PATH)}"),
         ("③ 特征", f"182 → 37/44\n\nIC≥0.022 / r≤0.92 / 累积0.88\n\nTop1 {top_feature}"),
         ("④ 建模", f"LGB有效预测 {pred_count} 条\n\nPPO模型 global_best.zip\n\n44 维特征 {ppo_shape}"),
-        ("⑤ 回测", "统一引擎 9 套\n\n滑点0.0005 / 双边费0.001\n\n单资产上限0.30"),
+        ("⑤ 回测", "统一框架 10 套（含 SASF 硬切换）\n\n滑点 单边0.05% / 双边成本0.1%\n\n单资产上限 0.30"),
         ("⑥ 调仓", f"最新权重日期 {current_ppo['date'].date() if current_ppo.get('ok') else '不可用'}\n\n权重和校验\n\n{_status_text(current_ppo)}"),
     ]
     for col, (title, body) in zip(cards, card_text):
@@ -642,10 +642,10 @@ with tab_pipeline:
             st.plotly_chart(fig_nav, use_container_width=True)
         else:
             st.warning("统一回测净值文件读取失败，当前跳过净值图展示。")
-        st.caption("统一回测引擎口径")
+        st.caption("统一回测框架口径（10 套策略；SASF 硬切换＝下行/极寒切规则，其余用 PPO）")
         m1, m2, m3 = st.columns(3)
-        m1.metric("滑点", "0.0005")
-        m2.metric("双边费", "0.001")
+        m1.metric("滑点", "单边 0.05%")
+        m2.metric("双边成本", "0.1%")
         m3.metric("单资产上限", "0.30")
         st.markdown("**分段回测（6 阶段）**")
         st.image(f"{BASE}/results/charts/fig2_segmented_backtest.png", use_container_width=True)
