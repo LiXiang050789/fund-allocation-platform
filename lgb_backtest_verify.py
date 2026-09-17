@@ -40,7 +40,7 @@ HEDGE_INDEXES  = [ETF_CODES.index(e) for e in HEDGE_ETFS]
 # ============ 数据加载 ============
 price_df = pd.read_csv(f'{DATA}/etf_price_clean.csv', encoding='utf-8-sig', parse_dates=['date'])
 listed_df = pd.read_csv(f'{DATA}/etf_price_clean.csv', encoding='utf-8-sig', parse_dates=['date'])
-score_df  = pd.read_csv(f'{DATA}/market_score_clean.csv', encoding='utf-8-sig', parse_dates=['date'])
+score_df  = pd.read_csv(f'{DATA}/market_score_daily.csv', encoding='utf-8-sig', parse_dates=['date'])
 
 price_df = price_df.set_index('date')
 prices = price_df[ETF_CODES].copy()

@@ -52,7 +52,7 @@ MACRO_LAG = 30
 # ============================================================
 price_df = pd.read_csv(f'{DATA}/etf_price_clean.csv', encoding='utf-8-sig', parse_dates=['date'])
 listed_df = pd.read_csv(f'{DATA}/etf_price_clean.csv', encoding='utf-8-sig', parse_dates=['date'])
-score_df  = pd.read_csv(f'{DATA}/market_score_clean.csv', encoding='utf-8-sig', parse_dates=['date'])
+score_df  = pd.read_csv(f'{DATA}/market_score_daily.csv', encoding='utf-8-sig', parse_dates=['date'])
 
 price_df = price_df.set_index('date')
 prices = price_df[ETF_CODES].copy()
@@ -382,6 +382,58 @@ def strategy_ppo_daily(dates):
     ppo_daily = ppo_daily.clip(lower=MIN_WEIGHT, upper=MAX_WEIGHT)
     ppo_daily = ppo_daily.reindex(dates).ffill().fillna(0)
     return ppo_daily
+def strategy_sasf_hard_switch(dates):
+    """
+    SASF 硬切换：market_state 为"下行/极寒" → 动态评分；否则 → PPO
+    """
+    # 1. 获取动态评分权重（月度）
+    score_monthly = strategy_dynamic_score(dates)
+
+    # 2. 获取 PPO 日频权重，再转月度
+    if not os.path.exists(PPO_WEIGHT_PATH):
+        print(f"⚠️ PPO权重文件不存在 {PPO_WEIGHT_PATH}，跳过 SASF")
+        return None
+    ppo_daily = pd.read_csv(PPO_WEIGHT_PATH, parse_dates=["date"]).set_index("date")
+    ppo_daily = ppo_daily.clip(lower=MIN_WEIGHT, upper=MAX_WEIGHT)
+    ppo_daily = ppo_daily.reindex(dates).ffill().fillna(0)
+    row_sums = ppo_daily.sum(axis=1)
+    ppo_daily = ppo_daily.div(row_sums.where(row_sums > 0, 1.0), axis=0)
+
+    # 3. 月度调仓日
+    monthly = get_monthly_rebalance_dates(dates)
+
+    # 4. 逐月切换
+    weights = {}
+    for d in monthly:
+        key = pd.Timestamp(d)
+        try:
+            st = state.loc[d]
+        except (KeyError, IndexError):
+            st = '震荡'
+        if pd.isna(st):
+            st = '震荡'
+
+        # 下行/极寒 → 动态评分
+        if st in ('下行', '极寒'):
+            if key in score_monthly.index:
+                w = score_monthly.loc[key].values
+            else:
+                cand = score_monthly.index[score_monthly.index <= key]
+                w = score_monthly.loc[cand[-1]].values if len(cand) > 0 else np.zeros(7)
+        else:
+            # 其他 → PPO
+            if key in ppo_daily.index:
+                w = ppo_daily.loc[key].values
+            else:
+                cand = ppo_daily.index[ppo_daily.index <= key]
+                w = ppo_daily.loc[cand[-1]].values if len(cand) > 0 else np.zeros(7)
+
+        s = w.sum()
+        if s > 0:
+            w = w / s
+        weights[pd.Timestamp(d)] = w
+
+    return pd.DataFrame(weights, index=ETF_CODES).T
 
 # ============================================================
 # 4. 回测引擎
@@ -485,6 +537,7 @@ strategies_monthly = [
     ('动态评分',  strategy_dynamic_score),
     ('LGB融合',   strategy_lgb_fusion),
     ('PPO月度',   strategy_ppo_monthly),
+    ('SASF硬切换', strategy_sasf_hard_switch),
 ]
 # 日频PPO（附录对照）
 strategies_daily = [('PPO原生日频', strategy_ppo_daily)]
