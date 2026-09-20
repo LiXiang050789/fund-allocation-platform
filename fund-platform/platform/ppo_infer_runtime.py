@@ -24,7 +24,7 @@ EXPERIMENT_CFG = {
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPO_ROOT = os.path.dirname(BASE)
-MODEL_PATH = os.path.join(BASE, "models", "global_best.zip")
+MODEL_PATH = os.path.join(BASE, "models", "H_equity_residual_best.zip")
 FEATURE_CANDIDATES = [
     os.path.join(BASE, "data", "clean", "train_feature_filtered_ppo.csv"),
     os.path.join(BASE, "data", "clean", "train_feature_filtered.csv"),

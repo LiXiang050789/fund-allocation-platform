@@ -20,10 +20,10 @@ st.set_page_config(page_title="指数基金智能配置平台", layout="wide", p
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REPO_ROOT = os.path.dirname(BASE)
 RAW_DIR = os.path.join(BASE, "data", "raw")
-PPO_MODEL_PATH = f"{BASE}/models/global_best.zip"
+PPO_MODEL_PATH = f"{BASE}/models/H_equity_residual_best.zip"
 PPO_FEATURE_PATH = f"{BASE}/data/clean/train_feature_filtered_ppo.csv"  # 仅作提示，实际推理路径见 ppo_infer_runtime.py
 PPO_PRICE_PATH = f"{BASE}/data/clean/etf_price_clean.csv"
-PPO_WEIGHT_PATH = f"{BASE}/results/ppo_weight1.csv"
+PPO_WEIGHT_PATH = f"{BASE}/results/ppo_weight2.csv"
 PPO_RUNTIME_PATH = f"{BASE}/platform/ppo_infer_runtime.py"
 
 COLORS = {
@@ -36,6 +36,7 @@ COLORS = {
     "LGB融合": "#FF9800",
     "PPO月度": "#9C27B0",
     "PPO原生日频": "#673AB7",
+    "SASF硬切换": "#00BCD4",
 }
 ETF_CODES = ["hs300", "zz500", "kc50", "consume", "chip", "gold", "bond10"]
 ETF_CN = {
@@ -93,6 +94,9 @@ def _load_cached_ppo_weight(as_of_date, reason=""):
     for code in ETF_CODES:
         val = row.get(code, 0.0)
         weight_map[code] = float(val) if pd.notna(val) else 0.0
+    weight_sum = sum(weight_map.values())
+    if abs(weight_sum - 1.0) > 1e-2:
+        return {"ok": False, "message": f"PPO离线权重总和异常 {weight_sum:.4f}，文件损坏，当前仅使用市场评分"}
     message = f"PPO 实时推理不可用，已使用最近一次离线权重：{reason}" if reason else ""
     return {
         "ok": True,
@@ -104,7 +108,7 @@ def _load_cached_ppo_weight(as_of_date, reason=""):
     }
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, ttl=3600)
 def _infer_latest_ppo_weight_cached(date_key):
     if not os.path.exists(PPO_MODEL_PATH):
         return {"ok": False, "message": "PPO 模型未部署，当前仅使用市场评分"}
