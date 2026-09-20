@@ -23,7 +23,7 @@ RAW_DIR = os.path.join(BASE, "data", "raw")
 PPO_MODEL_PATH = f"{BASE}/models/global_best.zip"
 PPO_FEATURE_PATH = f"{BASE}/data/clean/train_feature_filtered_ppo.csv"  # 仅作提示，实际推理路径见 ppo_infer_runtime.py
 PPO_PRICE_PATH = f"{BASE}/data/clean/etf_price_clean.csv"
-PPO_WEIGHT_PATH = f"{BASE}/results/ppo_weight.csv"
+PPO_WEIGHT_PATH = f"{BASE}/results/ppo_weight1.csv"
 PPO_RUNTIME_PATH = f"{BASE}/platform/ppo_infer_runtime.py"
 
 COLORS = {
@@ -190,7 +190,7 @@ def _current_ppo_info(as_of_date):
 
 
 def _store_live_ppo_if_valid(ppo_info):
-    if ppo_info.get("ok") and ppo_info.get("source") == "live_inference":
+    if ppo_info.get("ok") and ppo_info.get("source") in ("live_inference", "ppo", "sasf"):
         st.session_state["ppo_live_info"] = ppo_info
 
 
@@ -238,7 +238,7 @@ DATA_DATE_MAX = score_df["date"].max().date()
 
 
 def _status_text(ppo_info):
-    if ppo_info.get("source") == "live_inference":
+    if ppo_info.get("source") in ("live_inference", "ppo", "sasf"):
         return "实时推理"
     if ppo_info.get("source") == "cached_weight":
         return "离线权重兜底，可点击执行实时推理验证"
@@ -269,6 +269,121 @@ def _render_weight_bar(ppo_info, title="PPO 权重"):
     fig.update_layout(height=320, title=title, yaxis_title="权重(%)", margin=dict(t=45, b=20))
     st.plotly_chart(fig, use_container_width=True)
     st.dataframe(weight_df.style.format({"权重": "{:.2%}"}), use_container_width=True, hide_index=True)
+
+
+def _infer_multi_strategy(strategy_name, as_of_date):
+    """
+    根据策略名调用对应 runtime
+    strategy_name: "SASF 硬切换" | "LGB 融合" | "PPO 原生日频"
+    """
+    ppo_python, python_label = resolve_ppo_python()
+
+    if strategy_name == "SASF 硬切换":
+        script = PPO_RUNTIME_PATH
+        args = [ppo_python, script, str(as_of_date), "sasf"]
+    elif strategy_name == "LGB 融合":
+        script = os.path.join(BASE, "platform", "lgb_infer_runtime.py")
+        args = [ppo_python, script, str(as_of_date)]
+    elif strategy_name == "PPO 原生日频":
+        script = PPO_RUNTIME_PATH
+        args = [ppo_python, script, str(as_of_date), "ppo"]
+    else:
+        return {"ok": False, "message": f"未知策略：{strategy_name}"}
+
+    started = time.perf_counter()
+    try:
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        proc = subprocess.run(
+            args, cwd=REPO_ROOT, text=True, capture_output=True, timeout=90,
+            encoding="utf-8", errors="replace",
+            env={**os.environ, "PYTHONIOENCODING": "utf-8:replace"},
+            creationflags=creationflags,
+        )
+        elapsed = time.perf_counter() - started
+        if proc.returncode != 0:
+            return {"ok": False, "message": (proc.stderr or proc.stdout)[-300:],
+                    "elapsed": elapsed, "python_label": python_label}
+        lines = [l for l in proc.stdout.strip().splitlines() if l.lstrip().startswith("{")]
+        if not lines:
+            return {"ok": False, "message": f"无 JSON 输出: {proc.stdout[:200]}",
+                    "elapsed": elapsed, "python_label": python_label}
+        payload = json.loads(lines[-1])
+        weight_map = {code: float(payload["weights"].get(code, 0.0)) for code in ETF_CODES}
+        return {
+            "ok": True,
+            "date": pd.Timestamp(payload["date"]),
+            "weights": weight_map,
+            "source": payload.get("source", "unknown"),
+            "market_state": payload.get("market_state", ""),
+            "message": payload.get("message", ""),
+            "n_features": payload.get("n_features"),
+            "model_obs_dim": payload.get("model_obs_dim"),
+            "steps": payload.get("steps"),
+            "elapsed": elapsed,
+            "python_label": python_label,
+            "strategy": strategy_name,
+        }
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "message": "推理超时（90s）",
+                "elapsed": 90.0, "python_label": python_label}
+    except Exception as e:
+        return {"ok": False, "message": str(e),
+                "elapsed": time.perf_counter() - started,
+                "python_label": python_label}
+
+def _infer_with_runtime(runtime_script, as_of_date, mode=None):
+    """通用子进程调用：执行 SASF 或 LGB 推理 runtime"""
+    ppo_python, _ = resolve_ppo_python()
+    cmd = [ppo_python, runtime_script, str(as_of_date)]
+    if mode:
+        cmd.append(mode)
+    try:
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        proc = subprocess.run(
+            cmd, cwd=REPO_ROOT, text=True, capture_output=True, timeout=90,
+            encoding="utf-8", errors="replace",
+            env={**os.environ, "PYTHONIOENCODING": "utf-8:replace"},
+            creationflags=creationflags,
+        )
+        if proc.returncode != 0:
+            return {"ok": False, "message": (proc.stderr or proc.stdout)[-200:]}
+        lines = [l for l in proc.stdout.strip().splitlines() if l.lstrip().startswith("{")]
+        if not lines:
+            return {"ok": False, "message": "无 JSON 输出"}
+        payload = json.loads(lines[-1])
+        weight_map = {code: float(payload["weights"].get(code, 0.0)) for code in ETF_CODES}
+        return {
+            "ok": True,
+            "date": pd.Timestamp(payload["date"]),
+            "weights": weight_map,
+            "source": payload.get("source", "unknown"),
+            "market_state": payload.get("market_state", ""),
+            "message": payload.get("message", ""),
+            "n_features": payload.get("n_features"),
+            "model_obs_dim": payload.get("model_obs_dim"),
+            "steps": payload.get("steps"),
+        }
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
+
+
+def _render_weight_bar_generic(weight_map, title):
+    """通用权重条形图"""
+    weight_df = pd.DataFrame({
+        "资产": [ETF_CN[c] for c in ETF_CODES],
+        "权重": [weight_map.get(c, 0.0) for c in ETF_CODES],
+    })
+    fig = go.Figure(go.Bar(
+        x=weight_df["资产"], y=weight_df["权重"] * 100,
+        marker_color=["#E91E63"] * 5 + ["#FFC107", "#4CAF50"],
+        text=[f"{v*100:.1f}%" for v in weight_df["权重"]],
+        textposition="outside",
+    ))
+    fig.update_layout(height=320, title=title, yaxis_title="权重(%)",
+                      margin=dict(t=45, b=20))
+    st.plotly_chart(fig, use_container_width=True)
+    st.dataframe(weight_df.style.format({"权重": "{:.2%}"}),
+                 use_container_width=True, hide_index=True)
 
 
 def _render_live_button(button_label, as_of_date):
@@ -603,7 +718,7 @@ with tab_pipeline:
         ppo_python, python_label = resolve_ppo_python()
         st.caption(f"PPO 解释器探测：{python_label} · {ppo_python}")
         live_info = st.session_state.get("ppo_live_info")
-        if live_info and live_info.get("ok") and live_info.get("source") == "live_inference":
+        if live_info and live_info.get("ok") and live_info.get("source") in ("live_inference", "ppo", "sasf"):
             diff = _compare_live_to_offline(live_info)
             ok = diff is not None and diff <= 1e-6
             _render_pipeline_chip(f"对拍最大偏差 {diff:.2e} {'✓' if ok else '✗'}", ok)
@@ -621,7 +736,7 @@ with tab_pipeline:
         else:
             st.caption("离线权重兜底，未对拍")
             info = _render_live_button("执行模型对拍", DATA_DATE_MAX)
-            if info and info.get("source") == "live_inference":
+            if info and info.get("source") in ("live_inference", "ppo", "sasf"):
                 diff = _compare_live_to_offline(info)
                 if diff is not None:
                     _render_pipeline_chip(f"对拍最大偏差 {diff:.2e} {'✓' if diff <= 1e-6 else '✗'}", diff <= 1e-6)
@@ -708,14 +823,76 @@ with tab3:
     st.caption(captions.get(tier_name, ""))
 
     st.divider()
-    st.subheader("🧪 PPO历史日期推理")
-    st.caption("换日期需重放，约 10–30 秒（本机实测 16s）；默认页面使用离线权重秒开。")
-    user_choose_date = st.date_input("选择推理日期", value=DATA_DATE_MAX, min_value=DATA_DATE_MIN, max_value=DATA_DATE_MAX)
-    live_info = _render_live_button("🚀 执行 PPO 推理", user_choose_date)
-    shown_info = live_info if live_info and live_info.get("ok") else _current_ppo_info(user_choose_date)
-    if shown_info.get("ok"):
-        st.caption(f"{_status_text(shown_info)} · 权重日期 {shown_info['date'].date()}")
-        _render_weight_bar(shown_info, "PPO 推理权重")
+    st.subheader("🧪 历史日期多策略推理")
+    st.caption("选择策略与日期后点击执行；SASF / PPO 需重放历史，约 10–30 秒；LGB 融合读离线权重，秒级返回。")
+
+    col_strategy, col_date = st.columns([1, 1])
+    with col_strategy:
+        strategy_choice = st.selectbox(
+            "选择策略",
+            ["SASF 硬切换", "LGB 融合", "PPO 原生日频"],
+            index=0,
+            help="SASF = PPO + 动态评分硬切换；LGB 融合 = LGB 预测 + 规则融合；PPO 原生日频 = 纯强化学习"
+        )
+    with col_date:
+        user_choose_date = st.date_input(
+            "选择推理日期",
+            value=DATA_DATE_MAX,
+            min_value=DATA_DATE_MIN,
+            max_value=DATA_DATE_MAX,
+        )
+
+    # 策略说明
+    strategy_desc = {
+        "SASF 硬切换": "📌 项目核心方案：市场状态为'下行/极寒'→动态评分，其余→PPO",
+        "LGB 融合": "📌 风险调整最优：LGB 预测 + 权益 Softmax + 避险风险平价",
+        "PPO 原生日频": "📌 纯强化学习：日频决策，无规则约束",
+    }
+    st.info(strategy_desc[strategy_choice])
+
+    if st.button(f"🚀 执行 {strategy_choice} 推理", use_container_width=True, type="primary"):
+        with st.spinner(f"正在执行 {strategy_choice} 推理，请稍候..."):
+            result = _infer_multi_strategy(strategy_choice, user_choose_date)
+            st.session_state["multi_strategy_result"] = result
+            st.session_state["multi_strategy_key"] = f"{strategy_choice}_{user_choose_date}"
+
+    # 展示结果
+    result = st.session_state.get("multi_strategy_result")
+    current_key = f"{strategy_choice}_{user_choose_date}"
+
+    if result is None:
+        st.caption("点击上方按钮执行推理")
+    elif not result.get("ok"):
+        st.error(f"推理失败：{result.get('message', '未知错误')}")
+    else:
+        # 如果是新策略或新日期，提示需要重新执行
+        if st.session_state.get("multi_strategy_key") != current_key:
+            st.warning(f"当前展示的是上一次结果。点击按钮重新执行 {strategy_choice} @ {user_choose_date}")
+
+        # 状态提示
+        source = result.get("source", "")
+        state = result.get("market_state", "")
+        if source == "dynamic_score":
+            st.warning(f"⚠️ 市场状态 **{state}** → 已切换至动态评分权重（防御模式）")
+        elif source == "ppo":
+            st.info(f"✅ 市场状态 **{state}** → 使用 PPO 权重（进攻模式）")
+        elif source == "lgb_fusion":
+            st.info(f"✅ 市场状态 **{state}** → LGB 融合权重")
+
+        # 权重图
+        _render_weight_bar_generic(result["weights"], f"{strategy_choice} 推荐权重")
+
+        # 元信息
+        meta_lines = [f"权重日期：{result['date'].date()}"]
+        if result.get("elapsed") is not None:
+            meta_lines.append(f"耗时 {result['elapsed']:.1f}s")
+        if result.get("python_label"):
+            meta_lines.append(result["python_label"])
+        if result.get("n_features") is not None:
+            meta_lines.append(f"{result['n_features']}维特征")
+        if result.get("steps") is not None:
+            meta_lines.append(f"重放{result['steps']}步")
+        st.caption(" · ".join(meta_lines))
 
 
 with tab4:
