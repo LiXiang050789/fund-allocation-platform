@@ -31,3 +31,8 @@ credentials.*
 # Conda 环境与包缓存（禁止提交）
 .conda_pkgs/
 .conda_ppo_py312/
+
+# 本地文档（不入库，见 2026-09-24 用户要求）
+codex-cc-switch-deepseek-配置指南.md
+项目书修订说明.md
+项目彻底理解手册-答辩备战版.md
