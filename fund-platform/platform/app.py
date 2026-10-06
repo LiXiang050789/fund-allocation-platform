@@ -423,7 +423,7 @@ with st.sidebar:
     st.divider()
     st.caption(f"数据日期: {latest['date'].date()}")
     st.caption("团队: 三元智投队")
-    st.caption("数据源: sf四维评分规则 + 北向NaN + 宏观滞后修正")
+    st.caption("数据源: 四维评分规则 + 北向NaN + 宏观滞后修正")
 
 
 tab1, tab_pipeline, tab3, tab4, tab5 = st.tabs(
