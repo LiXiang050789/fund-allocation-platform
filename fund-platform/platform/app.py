@@ -1,5 +1,5 @@
 """
-农行杯赛题一 · 指数基金智能配置决策平台
+工行杯 · 指数基金智能配置决策平台
 Streamlit 前端 — 市场仪表盘 / 自动化数据流水线 / 配置推荐 / AI助手 / 风险划分
 """
 import json
@@ -415,7 +415,7 @@ def _render_live_button(button_label, as_of_date):
 
 
 with st.sidebar:
-    st.title("🏦 农行杯赛题一")
+    st.title("🏦 工行杯")
     st.caption("指数基金智能配置决策平台")
     st.divider()
     st.metric("最新市场评分", f"{latest['total_score']:.0f}/100")
@@ -952,7 +952,7 @@ with tab4:
         api_key = st.text_input("DeepSeek API Key", type="password", placeholder="sk-...")
 
         if st.button("发送", use_container_width=True) and user_q and api_key:
-            system_prompt = f"""你是一个智能投顾助手，为农行客户提供资产配置建议。
+            system_prompt = f"""你是一个智能投顾助手，为工行客户提供资产配置建议。
 当前市场环境: 评分 {latest['total_score']:.0f}/100，状态 {latest['market_state']}。
 估值{latest['val_score']:.0f}/25，宏观{latest['macro_score']:.0f}/25，情绪{latest['sent_score']:.0f}/20，趋势{latest['trend_score']:.0f}/30。
 {ppo_info['text'] if ppo_info['ok'] else '无 PPO 权重，仅基于市场评分回答。'}
