@@ -31,7 +31,7 @@ env_df = pd.DataFrame(env_records)
 env_df["date"] = pd.to_datetime(env_df["date"])
 
 # 3、读取标准打分表
-std_score_df = pd.read_csv("../data/clean/market_score_daily.csv", parse_dates=["date"], encoding="gbk")
+std_score_df = pd.read_csv("../data/clean/market_score_daily.csv", parse_dates=["date"], encoding="utf-8-sig")
 
 # 4、合并两张表，inner交集，打印匹配行数排查是否为空
 compare_df = pd.merge(std_score_df, env_df, on="date", how="inner")

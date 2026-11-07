@@ -185,7 +185,7 @@ def main():
         j = out.merge(old_for_merge, on='date', how='inner')
         corr = j['total_score'].corr(j['score_total'])
         state_map_old = {1.0:'上行', 0.5:'震荡偏强', 0.0:'震荡', -0.5:'下行', -1.0:'极寒'}
-        old_mapped = j['state_old'].map(state_map_old)
+        old_mapped = j['state_old'].map(state_map_old).fillna(j['state_old'])
         agree = (j['market_state'] == old_mapped).mean()
         print(f'    总分相关系数: {corr:.4f}')
         print(f'    状态标签一致率: {agree:.1%}')
