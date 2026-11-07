@@ -85,7 +85,8 @@ def call_deepseek(system_prompt: str, question: str) -> tuple[str, dict]:
                 {"role": "user", "content": question},
             ],
             "max_tokens": 500,
-            "temperature": 0.7,
+            # 评测置 0 降低随机性；平台线上运行仍为 0.7
+            "temperature": 0.0,
         },
         timeout=60,
     )
