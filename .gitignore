@@ -36,3 +36,12 @@ credentials.*
 codex-cc-switch-deepseek-配置指南.md
 项目书修订说明.md
 项目彻底理解手册-答辩备战版.md
+
+# Agent 本地密钥与运行产物
+fund-platform/agent/.env
+fund-platform/agent/**/.env
+fund-platform/agent/.venv/
+fund-platform/agent/data/index/
+fund-platform/agent/data/checkpoints.sqlite
+fund-platform/agent/reports/
+fund-platform/agent/.pytest_cache/

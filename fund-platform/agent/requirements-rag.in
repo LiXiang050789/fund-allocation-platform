@@ -1,0 +1,6 @@
+# Phase 2 RAG 依赖（torch 走 CPU 轮子，安装体积较大）
+faiss-cpu>=1.9,<2
+rank-bm25>=0.2.2,<0.3
+sentence-transformers>=3.0,<7
+pypdf>=4.0,<7
+python-docx>=1.1,<2

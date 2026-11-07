@@ -1,0 +1,13 @@
+# Phase 0-1 核心依赖（不含 RAG 重型依赖，见 requirements-rag.in）
+langgraph>=0.2.35,<0.4
+langchain>=0.3.25,<0.4
+langchain-core>=0.3.60,<0.4
+langchain-openai>=0.3.17,<0.4
+openai>=1.98,<2
+pandas>=2.2,<3
+numpy>=1.26,<3
+python-dotenv>=1.0,<2
+PyYAML>=6.0,<7
+requests>=2.32,<3
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
