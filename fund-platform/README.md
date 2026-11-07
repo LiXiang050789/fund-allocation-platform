@@ -264,4 +264,4 @@ cat results/backtest/baseline_metrics.csv
 
 ---
 
-*最后更新: 2026-09-13（平台合并：新增「自动化数据流水线」页；PPO 指标改统一回测引擎口径）
+*最后更新: 2026-11-07（评分口径统一：market_score_daily 恢复 7/28 修正版，与 market_score_clean 逐行一致；dynamic/lgb/sasf 月度权重已重生成）*
