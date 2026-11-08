@@ -2,7 +2,7 @@
 """25 题黄金集评测。
 
 mode=baseline：复现平台现有的「直接调用 DeepSeek」AI 助手（无工具、无检索）。
-mode=agent：调用 Agent 服务 /chat（Phase 1 后可用）。
+mode=agent：直接调用 LangGraph 问答图。
 
 用法：
     .venv/bin/python eval/run_eval.py --mode baseline
@@ -156,6 +156,38 @@ def run_baseline(items: list[dict]) -> list[dict]:
     return results
 
 
+def run_agent(items: list[dict]) -> list[dict]:
+    sys.path.insert(0, str(AGENT_DIR))
+    from app.graph import graph
+
+    results = []
+    for index, item in enumerate(items, 1):
+        started = time.perf_counter()
+        state = {}
+        try:
+            state = graph.invoke({"question": item["question"], "thread_id": f"eval-{item['id']}"})
+            answer = state["answer"]
+            fails = grade(item, answer)
+        except Exception as exc:
+            answer, fails = "", [f"调用失败: {type(exc).__name__}"]
+        calls = state.get("tool_calls", [])
+        expected = set(item.get("tools", []))
+        selected = bool(expected.intersection(c["name"] for c in calls))
+        supported = bool(calls) and any(
+            r.get("ok") and any(source in answer for source in r.get("source", "").split("; ") if source)
+            for r in state.get("tool_results", []))
+        result = dict(id=item["id"], category=item["category"], question=item["question"],
+                      answer=answer, latency_s=round(time.perf_counter()-started, 2),
+                      fails=fails, golden_answer=item.get("golden_answer", ""), source=item.get("source", ""),
+                      tool_calls=calls, tool_selection_correct=selected, citation_supported=supported,
+                      verified=state.get("verified", False), citations=state.get("citations", []))
+        result["pass"] = not fails
+        results.append(result)
+        print(f"[{index:02d}/{len(items)}] {item['id']} {result['latency_s']:.2f}s " +
+              ("PASS" if not fails else "FAIL " + "; ".join(fails)), flush=True)
+    return results
+
+
 def summarize(results: list[dict], mode: str) -> dict:
     total = len(results)
     passed = sum(1 for r in results if r["pass"])
@@ -176,22 +208,27 @@ def summarize(results: list[dict], mode: str) -> dict:
         "by_category": by_cat,
         "latency_p50": lat[len(lat) // 2] if lat else None,
         "latency_p95": lat[min(len(lat) - 1, int(len(lat) * 0.95))] if lat else None,
-        "citation_support_rate": 0.0 if mode == "baseline" else None,
-        "citation_note": "baseline 无检索、无引用，按定义记 0" if mode == "baseline" else "",
+        "citation_support_rate": 0.0 if mode == "baseline" else round(sum(r.get("citation_supported", False) for r in results) / total, 4),
+        "tool_selection_accuracy": round(sum(r.get("tool_selection_correct", False) for r in results) / total, 4) if mode == "agent" else None,
+        "citation_note": "baseline 无检索、无引用，按定义记 0" if mode == "baseline" else "按全部题目统计成功工具 source 路径的引用",
     }
 
 
 def write_report(summary: dict, results: list[dict], system_prompt: str) -> None:
+    suffix = "_agent" if summary["mode"] == "agent" else ""
     lines = [
         "# 25 题评测报告",
         "",
         f"- 模式：`{summary['mode']}`",
+        f"- 执行方式：`{summary.get('execution', 'configured_llm')}`",
         f"- 时间：{summary['run_at']}",
         f"- 总题数：{summary['total']}",
         f"- 通过：{summary['pass']}",
         f"- 准确率：{summary['accuracy']:.1%}",
         f"- 引用支持率：{summary.get('citation_support_rate')}（{summary.get('citation_note', '')}）",
         f"- 延迟 p50/p95：{summary['latency_p50']}s / {summary['latency_p95']}s",
+        "",
+        f"- 工具选择准确率：{summary.get('tool_selection_accuracy')}",
         "",
         "## 分类通过率",
         "",
@@ -203,8 +240,18 @@ def write_report(summary: dict, results: list[dict], system_prompt: str) -> None
     lines += ["", "## 逐题结果", "", "| ID | 结果 | 失败项 |", "|---|---|---|"]
     for r in results:
         lines.append(f"| {r['id']} | {'PASS' if r['pass'] else 'FAIL'} | {'; '.join(r['fails']) or '-'} |")
-    lines += ["", "## 基线 system prompt（原文）", "", "```text", system_prompt, "```", ""]
-    (EVAL_DIR / "report.md").write_text("\n".join(lines), encoding="utf-8")
+    if summary["mode"] == "baseline":
+        lines += ["", "## 基线 system prompt（原文）", "", "```text", system_prompt, "```", ""]
+    else:
+        baseline_path = EVAL_DIR / "results.json"
+        if baseline_path.exists():
+            baseline = json.loads(baseline_path.read_text(encoding="utf-8"))["summary"]
+            lines += ["", f"基线通过 {baseline['pass']}/{baseline['total']}；Agent 通过 {summary['pass']}/{summary['total']}。"]
+        lines += ["", "工具选择和引用支持均以全部题目为分母。空期望工具按无交集计分。",
+                  "引用支持率检查答案是否含成功工具的 source 路径；不代表全文语义核验。",
+                  "", "## 验证状态", ""]
+        lines += [f"- {r['id']}: verified={r.get('verified', False)}" for r in results]
+    (EVAL_DIR / f"report{suffix}.md").write_text("\n".join(lines), encoding="utf-8")
 
     detail = ["# 逐题作答明细", ""]
     for r in results:
@@ -222,29 +269,40 @@ def write_report(summary: dict, results: list[dict], system_prompt: str) -> None
             f"**判定**：{'; '.join(r['fails']) if r['fails'] else '通过'}",
             "",
         ]
-    (EVAL_DIR / "answers.md").write_text("\n".join(detail), encoding="utf-8")
+    (EVAL_DIR / f"answers{suffix}.md").write_text("\n".join(detail), encoding="utf-8")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=["baseline", "agent"], default="baseline")
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--offline", action="store_true", help="agent 模式禁用外部模型，仅验证确定性回退")
     args = parser.parse_args()
+    if args.offline and args.mode != "agent":
+        parser.error("--offline 仅用于 --mode agent")
 
     data = yaml.safe_load((EVAL_DIR / "golden_set.yaml").read_text(encoding="utf-8"))
     items = data["questions"]
     if args.limit:
         items = items[: args.limit]
 
+    suffix = "_agent" if args.mode == "agent" else ""
     if args.mode == "agent":
-        print("agent 模式在 Phase 1 接入；当前仅实现 baseline。", file=sys.stderr)
-        return 2
-
-    latest = load_latest_score()
-    system_prompt = build_baseline_prompt(latest)
-    results = run_baseline(items)
+        system_prompt = ""
+        if args.offline:
+            from unittest.mock import patch
+            sys.path.insert(0, str(AGENT_DIR))
+            with patch("app.graph.get_llm", side_effect=RuntimeError("offline evaluation")):
+                results = run_agent(items)
+        else:
+            results = run_agent(items)
+    else:
+        latest = load_latest_score()
+        system_prompt = build_baseline_prompt(latest)
+        results = run_baseline(items)
     summary = summarize(results, args.mode)
-    (EVAL_DIR / "results.json").write_text(
+    summary["execution"] = "offline_fallback" if args.offline else "configured_llm"
+    (EVAL_DIR / f"results{suffix}.json").write_text(
         json.dumps(
             {"summary": summary, "system_prompt": system_prompt, "results": results},
             ensure_ascii=False,
@@ -254,7 +312,8 @@ def main() -> int:
     )
     write_report(summary, results, system_prompt)
     print(f"\n准确率 {summary['pass']}/{summary['total']} = {summary['accuracy']:.1%}")
-    print(f"产物：{EVAL_DIR/'results.json'} / {EVAL_DIR/'report.md'} / {EVAL_DIR/'answers.md'}")
+    print(f"工具选择准确率 {summary.get('tool_selection_accuracy')}; 引用支持率 {summary['citation_support_rate']}")
+    print(f"产物：results{suffix}.json / report{suffix}.md / answers{suffix}.md")
     return 0
 
 

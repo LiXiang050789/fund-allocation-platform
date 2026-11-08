@@ -197,12 +197,19 @@ def build_brief_card(
 
 
 def build_test_card() -> dict:
+    from .tools.registry import get_market_score, get_strategy_metrics
+
+    market = get_market_score()
+    metrics = get_strategy_metrics(strategy="动态评分")
+    if not market["ok"] or not metrics["ok"]:
+        raise FeishuError(-1, "测试卡数据读取失败")
+    row = metrics["data"]["rows"][0]
     return build_brief_card(
-        report_date="2026-07-10",
-        score=33.9,
-        state="下行",
-        strategy_summary="动态评分：年化 13.13%，最大回撤 -14.27%；LGB 融合：夏普 0.646（全场最高）。",
-        risk_note="当前处于下行状态，权益仓位中枢建议 15%。以上为历史回测口径，不代表未来收益。",
+        report_date=market["as_of"],
+        score=market["data"]["total_score"],
+        state=market["data"]["market_state"],
+        strategy_summary=f"动态评分：年化 {row['年化收益']:.2%}，最大回撤 {row['最大回撤']:.2%}。",
+        risk_note="历史回测口径，不代表未来收益。",
         report_url="http://localhost:8501",
         disclaimer="Phase 0 冒烟测试卡片。仅供研究演示，不构成投资建议。",
     )
