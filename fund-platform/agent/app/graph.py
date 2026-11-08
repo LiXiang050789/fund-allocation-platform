@@ -161,13 +161,19 @@ POLICY = "无法预测明天涨跌或涨停，不能推荐个股或全仓操作�
 def compose(state):
     usable = [r for r in state["tool_results"] if r["ok"]]
     citations = list(dict.fromkeys(s for r in usable for s in r["source"].split("; ") if s))
+    if any(r["tool"] == "get_data_caveats" for r in usable):
+        question = state["question"]
+        primary = ("scripts/calc_market_score.py" if "滞后" in question else
+                   "data/clean/train_total_feature.csv" if any(w in question for w in ("北向", "特征", "维", "列")) else
+                   "data/clean/market_score_daily.csv")
+        citations.sort(key=lambda source: source != primary)
     answer = evidence_answer(state["question"], usable)
     if refusal(state["question"]):
         answer = POLICY
     elif usable:
         try:
             response = get_llm().invoke([
-                SystemMessage(content="只用提供的tool_results回答，数字只能来自证据。中文简洁回答，正文不超过180字，不写引用路径。分项用估值/宏观/情绪/趋势。比例转换成百分数，保留两位小数。不提供个性化投资建议。"),
+                SystemMessage(content="只用提供的tool_results回答，数字只能来自证据。中文简洁回答，正文不超过180字，不写引用路径。仅回答市场评分分项时使用估值/宏观/情绪/趋势标签。其他问题按原问题的主题回答，保留主题名称，不强加评分标签。比例转换成百分数，保留两位小数。不提供个性化投资建议。"),
                 HumanMessage(content=json.dumps({"question": state["question"], "tool_results": usable,
                                                  "correction": state.get("correction", "")}, ensure_ascii=False))])
             if isinstance(response.content, str) and response.content.strip():
@@ -176,7 +182,7 @@ def compose(state):
             log.warning("compose LLM failed: %s", type(exc).__name__)
     suffix = "不构成投资建议。"
     if suffix not in answer:
-        answer += "。" + suffix
+        answer = answer.rstrip("。 ") + "。" + suffix
     reference = f"\n[source: {citations[0]}]" if citations else ""
     limit = 300 - len(reference)
     if len(answer) > limit:

@@ -132,3 +132,12 @@ def test_long_answer_keeps_complete_numbers(monkeypatch):
     assert len(state['answer']) <= 300
     assert '不构成投资建议' in state['answer']
     assert state['citations'][0] in state['answer']
+
+
+def test_caveat_citations_follow_evidence_topic():
+    north = g.graph.invoke({'question': '北向资金数据缺口'})
+    assert north['citations'][0] == 'data/clean/train_total_feature.csv'
+    assert '[source: data/clean/train_total_feature.csv]' in north['answer']
+    macro = g.graph.invoke({'question': '宏观指标滞后口径'})
+    assert macro['citations'][0] == 'scripts/calc_market_score.py'
+    assert '[source: scripts/calc_market_score.py]' in macro['answer']

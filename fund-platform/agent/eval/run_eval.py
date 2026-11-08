@@ -269,7 +269,8 @@ def write_report(summary: dict, results: list[dict], system_prompt: str) -> None
             f"**判定**：{'; '.join(r['fails']) if r['fails'] else '通过'}",
             "",
         ]
-    (EVAL_DIR / f"answers{suffix}.md").write_text("\n".join(detail), encoding="utf-8")
+    (EVAL_DIR / f"answers{suffix}.md").write_text(
+        "\n".join(line.rstrip() for line in "\n".join(detail).splitlines()) + "\n", encoding="utf-8")
 
 
 def main() -> int:
