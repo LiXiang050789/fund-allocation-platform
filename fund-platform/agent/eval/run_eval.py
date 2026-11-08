@@ -180,7 +180,8 @@ def run_agent(items: list[dict]) -> list[dict]:
                       answer=answer, latency_s=round(time.perf_counter()-started, 2),
                       fails=fails, golden_answer=item.get("golden_answer", ""), source=item.get("source", ""),
                       tool_calls=calls, tool_selection_correct=selected, citation_supported=supported,
-                      verified=state.get("verified", False), citations=state.get("citations", []))
+                      verified=state.get("verified", False), citations=state.get("citations", []),
+                      llm_events=state.get("llm_events", []))
         result["pass"] = not fails
         results.append(result)
         print(f"[{index:02d}/{len(items)}] {item['id']} {result['latency_s']:.2f}s " +
@@ -210,6 +211,7 @@ def summarize(results: list[dict], mode: str) -> dict:
         "latency_p95": lat[min(len(lat) - 1, int(len(lat) * 0.95))] if lat else None,
         "citation_support_rate": 0.0 if mode == "baseline" else round(sum(r.get("citation_supported", False) for r in results) / total, 4),
         "tool_selection_accuracy": round(sum(r.get("tool_selection_correct", False) for r in results) / total, 4) if mode == "agent" else None,
+        "llm_error_count": sum(e["status"] == "error" for r in results for e in r.get("llm_events", [])),
         "citation_note": "baseline 无检索、无引用，按定义记 0" if mode == "baseline" else "按全部题目统计成功工具 source 路径的引用",
     }
 

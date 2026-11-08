@@ -2,14 +2,14 @@
 
 - 模式：`agent`
 - 执行方式：`configured_llm`
-- 时间：2026-11-08T17:10:28
+- 时间：2026-11-08T23:54:22
 - 总题数：25
 - 通过：25
 - 准确率：100.0%
 - 引用支持率：1.0（按全部题目统计成功工具 source 路径的引用）
-- 延迟 p50/p95：3.48s / 4.39s
+- 延迟 p50/p95：3.78s / 10.6s
 
-- 工具选择准确率：0.92
+- 工具选择准确率：0.96
 
 ## 分类通过率
 
@@ -75,7 +75,7 @@
 - S06: verified=True
 - G01: verified=True
 - G02: verified=True
-- G03: verified=True
+- G03: verified=False
 - G04: verified=True
 - G05: verified=True
 - R01: verified=True

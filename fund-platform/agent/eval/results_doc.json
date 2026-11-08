@@ -1,0 +1,1677 @@
+{
+  "summary": {
+    "execution": "configured_llm",
+    "run_at": "2026-11-09T00:03:26+08:00",
+    "model": "deepseek-flash",
+    "total": 15,
+    "recall_at_5": 0.8666666666666667,
+    "citation_valid_rate": 1.0,
+    "expected_source_cited_rate": 0.9333333333333333,
+    "keyword_coverage": 0.9811320754716981,
+    "verified_rate": 0.9333333333333333,
+    "latency_p50": 7.22,
+    "latency_p95": 20.32,
+    "llm_error_count": 0,
+    "backend_counts": {
+      "hybrid": 15,
+      "bm25": 0
+    }
+  },
+  "results": [
+    {
+      "id": "Q01",
+      "question": "评分系统四个维度的权重和满分分别是多少，合计满分是多少？",
+      "answer": "估值（权重25，满分25）；宏观（权重25，满分25）；情绪（权重20，满分20）；趋势（权重30，满分30）。合计满分100。\n\n \n实际数据以数据工具为准；非投资建议。实际数据以数据工具为准。不构成投资建议。\n[来源: 评分系统金融规则.docx §三、综合分与状态映射]",
+      "source": "fund-platform/docs/评分系统金融规则.docx",
+      "source_quote": "# 注：四个维度得分之和自动等于100分（25+25+20+30=100）",
+      "golden_answer": "三、综合分与状态映射\n总分 = val_score + macro_score + sent_score + trend_score\n# 注：四个维度得分之和自动等于100分（25+25+20+30=100）",
+      "caveat": null,
+      "recall_at_5": true,
+      "citation_valid": true,
+      "expected_source_cited": true,
+      "keyword_hits": 4,
+      "keyword_total": 4,
+      "verified": true,
+      "tool_calls": [
+        {
+          "name": "search_docs",
+          "args": {
+            "query": "评分系统四个维度的权重和满分分别是多少，合计满分是多少？",
+            "top_k": 8
+          },
+          "ok": true
+        }
+      ],
+      "retrieved": [
+        {
+          "chunk_id": "ae586eeccf309207cc6f744c",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 二、市场评分系统（全项目的\"骨架\"，xf 主讲你兜底）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "## 二、市场评分系统（全项目的\"骨架\"，xf 主讲你兜底）  \n四维打分（权重来自 xf 金融规则文档）：**估值 25**（沪深300 PE 5 年分位：≤30% 满分、≥70% 零分）+ **宏观 25**（PMI 与 10Y-2Y 利差）+ **情绪 20**（两融变化、北向）+ **趋势 30**（价格偏离 MA20）。\n五态映射：**≥75 上行 / 60-74 震荡偏强 / 45-59 震荡 / 30-44 下行 / <30 极寒**。\n稳健性证据：**权重 ±5% 随机扰动 100 次，状态标签一致率均值 92.6%、最低 84.4%**（`scripts/sensitivity_analysis.py` 实跑可复现）。\n**关键**：评分输出\"状态\"，状态决定权益中枢（见下），**这是所有策略共同的仓位层**。  \n---",
+          "styles": [],
+          "numbering": [],
+          "score": 0.03225806451612903
+        },
+        {
+          "chunk_id": "983248d0b9d8484855e4d662",
+          "source": "fund-platform/docs/评分系统金融规则.docx",
+          "source_name": "评分系统金融规则.docx",
+          "section": "三、综合分与状态映射",
+          "doc_date": "2026-07-23",
+          "authority": "authoritative",
+          "text": "三、综合分与状态映射\n总分 = val_score + macro_score + sent_score + trend_score\n# 注：四个维度得分之和自动等于100分（25+25+20+30=100）\n| 总分区间 | 状态标签 | 含义 |\n| --- | --- | --- |\n| ≥75 | 上行 | 牛市/强势上涨 |\n| 60-74 | 震荡偏强 | 结构性行情，偏多 |\n| 45-59 | 震荡 | 横盘整理，方向不明 |\n| 30-44 | 下行 | 熊市/弱势下跌 |\n| ＜30 | 极寒 | 恐慌/流动性危机 |",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.031544957774465976
+        },
+        {
+          "chunk_id": "3fa9cd677ef2ad912301cd1c",
+          "source": "fund-platform/docs/用户画像测评问卷+打分规则.docx",
+          "source_name": "用户画像测评问卷+打分规则.docx",
+          "section": "二、总分与风险等级对应关系",
+          "doc_date": "2026-07-27",
+          "authority": "authoritative",
+          "text": "二、总分与风险等级对应关系\n问卷满分为148分（第7题满分10分 + 其余14题各10分 + 第9题额外加2分封顶 = 148分）。\n| 测评总分 | 风险承受能力等级 | 等级描述 |\n| --- | --- | --- |\n| 20分及以下 | C1 | 保守型 — 风险承受能力极低，仅适合低风险产品 |\n| 21 - 40分 | C2 | 谨慎型 — 风险承受能力较低，适合中低风险产品 |\n| 41 - 65分 | C3 | 稳健型 — 风险承受能力中等，适合中风险产品 |\n| 66 - 90分 | C4 | 积极型 — 风险承受能力较高，适合中高风险产品 |\n| 91分及以上 | C5 | 激进型 — 风险承受能力高，可投资所有风险等级产品 |\n特殊认定：若用户在第12题（最大亏损承受）中选择A（不能承受任何亏损）且总分在30分以下，可认定为 “风险承受能力最低类别” ，仅能购买R1级产品。",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.030309988518943745
+        },
+        {
+          "chunk_id": "2bebe01a307417d68be2f456",
+          "source": "fund-platform/docs/评分系统金融规则.docx",
+          "source_name": "评分系统金融规则.docx",
+          "section": "二、维度打分函数 / 维度一：估值（目前定为25%）",
+          "doc_date": "2026-07-23",
+          "authority": "authoritative",
+          "text": "维度一：估值（目前定为25%）\n数据支撑：当沪深300PE百分位低于30%时，基本都对于应指数的历史低点（2008年底、2011-2014年、2016年底、2018年底）。PE百分位高于70%则进入高估区间。\ndef calc_val_score(pe_pct):\n\"\"\"\npe_pct: 当前PE在5年滚动窗口的历史分位数（0-1之间）\n输出: 0-25分\n\"\"\"\nif pe_pct <= 0.30:\nreturn 25.0                    # 极度低估，满分\nelif pe_pct >= 0.70:\nreturn 0.0                     # 高估，零分\nelse:\n# 30%-70%之间线性插值：从25分线性降到0分\nreturn 25.0 * (1 - (pe_pct - 0.30) / 0.40)\n依据：\n1.阈值30%/70%：来自市场通行的估值分位数规则（参考理杏仁https://blog.realduang.com/blogs/financial-analysis/2026-02-22.html#%E7%BB%93%E8%AF%AD）\n2.满分25分：对应25%的权重\n3.线性插值：最简单的映射方法",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.029957522915269395
+        },
+        {
+          "chunk_id": "fe84cc7785d57d00fc099a62",
+          "source": "fund-platform/docs/评分系统金融规则.docx",
+          "source_name": "评分系统金融规则.docx",
+          "section": "二、维度打分函数 / 维度四：趋势（30%，权重最高）",
+          "doc_date": "2026-07-23",
+          "authority": "authoritative",
+          "text": "维度四：趋势（30%，权重最高）\n数据支撑：趋势跟踪是量化里最朴素但长期有效的策略。趋势维度在择时策略中通常赋予最高权重，因为“趋势一旦形成，短期不易逆转”。\n函数：\ndef calc_trend_score(price, ma20):\n\"\"\"\nprice: 当日收盘价\nma20: 20日均线\n输出: 0-30分\n\"\"\"\n# 价格相对于MA20的偏离度\ndeviation = (price / ma20 - 1) * 100  # 百分比\nif deviation >= 5.0:\nreturn 30.0\nelif deviation <= -5.0:\nreturn 0.0\nelse:\nreturn 30.0 * (deviation + 5.0) / 10.0\n依据：\n1.阈值±5%：价格偏离MA20超过5%通常被视为趋势确立的信号\n2.满分30分：对应30%的最高权重——趋势是四维中最具预测力的维度",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.029877369007803793
+        }
+      ],
+      "backends": [
+        "hybrid"
+      ],
+      "llm_events": [
+        {
+          "stage": "router",
+          "status": "success"
+        },
+        {
+          "stage": "compose",
+          "status": "success"
+        }
+      ],
+      "fails": [],
+      "latency_s": 20.32
+    },
+    {
+      "id": "Q02",
+      "question": "估值打分规则中，PE分位30%和70%的阈值与线性插值如何定义？",
+      "answer": "估值规则：PE分位为当前PE在5年滚动窗口的历史分位数（0-1）。分位≤30%（0.30）时满分25分；≥70%（0.70）时0分；30%-70%之间按 `25.0*(1-(pe_pct-0.30)/0.40)` 从25分线性降至0分。实际数据口径以数据工具为准。不构成个性化投资建议。不构成投资建议。\n[来源: 评分系统金融规则.docx §二、维度打分函数 / 维度一：估值（目前定为25%）]",
+      "source": "fund-platform/docs/评分系统金融规则.docx",
+      "source_quote": "# 30%-70%之间线性插值：从25分线性降到0分",
+      "golden_answer": "维度一：估值（目前定为25%）\n数据支撑：当沪深300PE百分位低于30%时，基本都对于应指数的历史低点（2008年底、2011-2014年、2016年底、2018年底）。PE百分位高于70%则进入高估区间。\ndef calc_val_score(pe_pct):\n\"\"\"\npe_pct: 当前PE在5年滚动窗口的历史分位数（0-1之间）\n输出: 0-25分\n\"\"\"\nif pe_pct <= 0.30:\nreturn 25.0                    # 极度低估，满分\nelif pe_pct >= 0.70:\nreturn 0.0                     # 高估，零分\nelse:\n# 30%-70%之间线性插值：从25分线性降到0分\nreturn 25.0 * (1 - (pe_pct - 0.30) / 0.40)\n依据：\n1.阈值30%/70%：来自市场通行的估值分位数规则（参考理杏仁https://blog.realduang.com/blogs/financial-analysis/2026-02-22.html#%E7%BB%93%E8%AF%AD）\n2.满分25分：对应25%的权重\n3.线性插值：最简单的映射方法",
+      "caveat": null,
+      "recall_at_5": true,
+      "citation_valid": true,
+      "expected_source_cited": true,
+      "keyword_hits": 4,
+      "keyword_total": 4,
+      "verified": false,
+      "tool_calls": [
+        {
+          "name": "search_docs",
+          "args": {
+            "query": "估值打分规则 PE分位 30% 70% 阈值 线性插值 如何定义",
+            "top_k": 6
+          },
+          "ok": true
+        }
+      ],
+      "retrieved": [
+        {
+          "chunk_id": "2bebe01a307417d68be2f456",
+          "source": "fund-platform/docs/评分系统金融规则.docx",
+          "source_name": "评分系统金融规则.docx",
+          "section": "二、维度打分函数 / 维度一：估值（目前定为25%）",
+          "doc_date": "2026-07-23",
+          "authority": "authoritative",
+          "text": "维度一：估值（目前定为25%）\n数据支撑：当沪深300PE百分位低于30%时，基本都对于应指数的历史低点（2008年底、2011-2014年、2016年底、2018年底）。PE百分位高于70%则进入高估区间。\ndef calc_val_score(pe_pct):\n\"\"\"\npe_pct: 当前PE在5年滚动窗口的历史分位数（0-1之间）\n输出: 0-25分\n\"\"\"\nif pe_pct <= 0.30:\nreturn 25.0                    # 极度低估，满分\nelif pe_pct >= 0.70:\nreturn 0.0                     # 高估，零分\nelse:\n# 30%-70%之间线性插值：从25分线性降到0分\nreturn 25.0 * (1 - (pe_pct - 0.30) / 0.40)\n依据：\n1.阈值30%/70%：来自市场通行的估值分位数规则（参考理杏仁https://blog.realduang.com/blogs/financial-analysis/2026-02-22.html#%E7%BB%93%E8%AF%AD）\n2.满分25分：对应25%的权重\n3.线性插值：最简单的映射方法",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.03278688524590164
+        },
+        {
+          "chunk_id": "ae586eeccf309207cc6f744c",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 二、市场评分系统（全项目的\"骨架\"，xf 主讲你兜底）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "## 二、市场评分系统（全项目的\"骨架\"，xf 主讲你兜底）  \n四维打分（权重来自 xf 金融规则文档）：**估值 25**（沪深300 PE 5 年分位：≤30% 满分、≥70% 零分）+ **宏观 25**（PMI 与 10Y-2Y 利差）+ **情绪 20**（两融变化、北向）+ **趋势 30**（价格偏离 MA20）。\n五态映射：**≥75 上行 / 60-74 震荡偏强 / 45-59 震荡 / 30-44 下行 / <30 极寒**。\n稳健性证据：**权重 ±5% 随机扰动 100 次，状态标签一致率均值 92.6%、最低 84.4%**（`scripts/sensitivity_analysis.py` 实跑可复现）。\n**关键**：评分输出\"状态\"，状态决定权益中枢（见下），**这是所有策略共同的仓位层**。  \n---",
+          "styles": [],
+          "numbering": [],
+          "score": 0.03128054740957967
+        },
+        {
+          "chunk_id": "22752a604ebac4828458a3d5",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 三、LGB 板块（★ 你主答辩，重点吃透） / 3.2 数据与特征（四层筛选 + 两套特征集）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "### 3.2 数据与特征（四层筛选 + 两套特征集）  \n**输入**：`train_total_feature.csv`，**182 列（181 特征 + 日期，GBK 编码）**——技术因子（7 ETF × 11 指标）、估值（PE/PB/PS/股息/分位）、宏观（PMI/CPI/M2/社融/利率）、资金（两融/北向/换手）。\n**四层筛选流水线**（`scripts/特征筛选.py`，阈值都在脚本里可查）：\n| 层 | 规则 | 阈值（代码常量） | 为什么 |\n|---|---|---|---|\n| 1 | 3σ 极端值截断 | `SIGMA_THRESH=3` | 消除录入错误与极端行情对归一化的干扰 |\n| 2 | IC 有效性筛选 | `IC_THRESH=0.022` | 高于常用 0.015，只留有统计意义的因子 |\n| 3 | 共线性剔除 | `CORR_THRESH=0.92` | 高度共线特征会稀释树模型的分裂增益 |\n| 4 | LGB 重要性筛选 | `IMPORTANCE_CUM_RATIO=0.88` | 保留累计贡献 88% 的精简子集 |  ",
+          "styles": [],
+          "numbering": [],
+          "score": 0.03125763125763126
+        },
+        {
+          "chunk_id": "07efcb472e7ff52f6f88630b",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 一、资产池与数据链（被问先讲这层） / 1.7 本节高频追问 Q&A",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "### 1.7 本节高频追问 Q&A  \n1. **为什么是这 7 只？** 核心-卫星 + 四类资产低相关（黄金≈0、国债多数负相关），且 ETF 透明低成本、适配银行渠道。\n2. **数据有多长？** 清洗后**回测与演示区间 2015-01~2026-07，2798 个交易日（11.5 年）**；原始采集窗口更早（约 2010 起），但 2015 前可用资产不足，不进回测。\n3. **未上市资产怎么处理？** 掩码置零 + 特征置空，**不伪造**；因此 2015 年只有 4 只可配。\n4. **估值分位怎么算的？** 沪深300 PE **5 年滚动分位**，point-in-time（只用当日及以前数据），避免前视。\n5. **北向停了怎么办？** 置 NaN + 评分给中性分；不填 0。\n6. **怎么证明数据没被动过手脚？** 原始文件留档可审计 + 脚本可复现 + 估值与官网一致 + 日历 100% 对齐。",
+          "styles": [],
+          "numbering": [],
+          "score": 0.028790389395194696
+        },
+        {
+          "chunk_id": "f74c4ba794059054cde9c22a",
+          "source": "fund-platform/docs/评分系统金融规则.docx",
+          "source_name": "评分系统金融规则.docx",
+          "section": "二、维度打分函数",
+          "doc_date": "2026-07-23",
+          "authority": "authoritative",
+          "text": "二、维度打分函数",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.02782608695652174
+        }
+      ],
+      "backends": [
+        "hybrid"
+      ],
+      "llm_events": [
+        {
+          "stage": "router",
+          "status": "success"
+        },
+        {
+          "stage": "compose",
+          "status": "success"
+        },
+        {
+          "stage": "compose",
+          "status": "success"
+        }
+      ],
+      "fails": [],
+      "latency_s": 14.68
+    },
+    {
+      "id": "Q03",
+      "question": "宏观打分规则中，PMI的48/52阈值与期限利差-0.5%/1.0%如何计分？",
+      "answer": "宏观（25%）计分：PMI满分15分，≥52得15分，≤48得0分，48—52按15×(PMI−48)/4线性计分；期限利差满分10分，≥1.0%得10分，≤−0.5%得0分，−0.5%—1.0%按10×(利差+0.5)/1.5线性计分。不构成投资建议。\n[来源: 评分系统金融规则.docx §二、维度打分函数 / 维度二：宏观（25%）]",
+      "source": "fund-platform/docs/评分系统金融规则.docx",
+      "source_quote": "# PMI部分（满分15分）：50为荣枯线",
+      "golden_answer": "维度二：宏观（25%）\n数据支撑：美林时钟将经济周期划分为衰退、复苏、过热、滞胀四个阶段，对应不同资产配置。在中国实践中，PMI是判断经济强弱的核心指标。期限利差（10Y-2Y）反映经济预期，利差收窄甚至倒挂通常预示经济衰退风险。\n函数：\ndef calc_macro_score(pmi, spread_10y2y):\n\"\"\"\npmi: 制造业PMI（通常45-55之间）\nspread_10y2y: 10年期国债收益率 - 2年期国债收益率（单位：%）\n输出: 0-25分\n\"\"\"\n# PMI部分（满分15分）：50为荣枯线\nif pmi >= 52:\npmi_score = 15.0\nelif pmi <= 48:\npmi_score = 0.0\nelse:\npmi_score = 15.0 * (pmi - 48) / 4.0   # 48→0分, 52→15分\n# 期限利差部分（满分10分）：利差越大越好\nif spread_10y2y >= 1.0:\nspread_score = 10.0\nelif spread_10y2y <= -0.5:\nspread_score = 0.0\nelse:\nspread_score = 10.0 * (spread_10y2y + 0.5) / 1.5\nreturn pmi_score + spread_score\n依据：\n1.PMI阈值是48/52:50是荣枯线，±2作为缓冲区间\n2.利差阈值-0.5%/1.0%：利差倒挂（负值）是衰退信号，利差>1%表示经济预期良好",
+      "caveat": null,
+      "recall_at_5": true,
+      "citation_valid": true,
+      "expected_source_cited": true,
+      "keyword_hits": 2,
+      "keyword_total": 2,
+      "verified": true,
+      "tool_calls": [
+        {
+          "name": "search_docs",
+          "args": {
+            "query": "宏观打分规则 PMI 48/52 阈值 期限利差 -0.5% 1.0% 计分",
+            "top_k": 6
+          },
+          "ok": true
+        },
+        {
+          "name": "search_docs",
+          "args": {
+            "query": "宏观因子评分 PMI 分档 期限利差 线性插值 打分方法",
+            "top_k": 6
+          },
+          "ok": true
+        }
+      ],
+      "retrieved": [
+        {
+          "chunk_id": "40d2d91334d39acb634f7511",
+          "source": "fund-platform/docs/评分系统金融规则.docx",
+          "source_name": "评分系统金融规则.docx",
+          "section": "二、维度打分函数 / 维度二：宏观（25%）",
+          "doc_date": "2026-07-23",
+          "authority": "authoritative",
+          "text": "维度二：宏观（25%）\n数据支撑：美林时钟将经济周期划分为衰退、复苏、过热、滞胀四个阶段，对应不同资产配置。在中国实践中，PMI是判断经济强弱的核心指标。期限利差（10Y-2Y）反映经济预期，利差收窄甚至倒挂通常预示经济衰退风险。\n函数：\ndef calc_macro_score(pmi, spread_10y2y):\n\"\"\"\npmi: 制造业PMI（通常45-55之间）\nspread_10y2y: 10年期国债收益率 - 2年期国债收益率（单位：%）\n输出: 0-25分\n\"\"\"\n# PMI部分（满分15分）：50为荣枯线\nif pmi >= 52:\npmi_score = 15.0\nelif pmi <= 48:\npmi_score = 0.0\nelse:\npmi_score = 15.0 * (pmi - 48) / 4.0   # 48→0分, 52→15分\n# 期限利差部分（满分10分）：利差越大越好\nif spread_10y2y >= 1.0:\nspread_score = 10.0\nelif spread_10y2y <= -0.5:\nspread_score = 0.0\nelse:\nspread_score = 10.0 * (spread_10y2y + 0.5) / 1.5\nreturn pmi_score + spread_score\n依据：\n1.PMI阈值是48/52:50是荣枯线，±2作为缓冲区间\n2.利差阈值-0.5%/1.0%：利差倒挂（负值）是衰退信号，利差>1%表示经济预期良好",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.03278688524590164
+        },
+        {
+          "chunk_id": "ae586eeccf309207cc6f744c",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 二、市场评分系统（全项目的\"骨架\"，xf 主讲你兜底）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "## 二、市场评分系统（全项目的\"骨架\"，xf 主讲你兜底）  \n四维打分（权重来自 xf 金融规则文档）：**估值 25**（沪深300 PE 5 年分位：≤30% 满分、≥70% 零分）+ **宏观 25**（PMI 与 10Y-2Y 利差）+ **情绪 20**（两融变化、北向）+ **趋势 30**（价格偏离 MA20）。\n五态映射：**≥75 上行 / 60-74 震荡偏强 / 45-59 震荡 / 30-44 下行 / <30 极寒**。\n稳健性证据：**权重 ±5% 随机扰动 100 次，状态标签一致率均值 92.6%、最低 84.4%**（`scripts/sensitivity_analysis.py` 实跑可复现）。\n**关键**：评分输出\"状态\"，状态决定权益中枢（见下），**这是所有策略共同的仓位层**。  \n---",
+          "styles": [],
+          "numbering": [],
+          "score": 0.031746031746031744
+        },
+        {
+          "chunk_id": "b5a79b43bf82103c48bacb03",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 三、LGB 板块（★ 你主答辩，重点吃透） / 3.2 数据与特征（四层筛选 + 两套特征集）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "→ **讲法**：\"最重要的因子是期限利差（0.196），恰好是我们评分系统宏观维度的核心指标——**规则层和 ML 层在数据上互相印证**。\"  \n**缺失结构（我实测，用于解释\"为什么预测从 2022 开始\"）**：特征表按年缺失率 2015–2019 为 **26%–49%**（未上市资产的价格/估值特征缺失），**2020 年降到 8%、2021 年起为 0%**。官方实现对含缺失的行做**整行剔除**。",
+          "styles": [],
+          "numbering": [],
+          "score": 0.031754032258064516
+        },
+        {
+          "chunk_id": "3c8ae443290b52a5a64077b9",
+          "source": "fund-platform/docs/评分系统金融规则.docx",
+          "source_name": "评分系统金融规则.docx",
+          "section": "四、数据对齐规则",
+          "doc_date": "2026-07-23",
+          "authority": "authoritative",
+          "text": "四、数据对齐规则\n| 数据项 | 发布规则 | 回测中可用时间 |\n| --- | --- | --- |\n| PE/PB分位数 | 每日收盘后更新 | 当日可用（用收盘价计算） |\n| PMI | 当月最后一天发布 | 当月最后一天可用 |\n| 10Y-2Y利差 | 每日17:30发布 | 次日可用 |\n| 两融余额 | 次日清晨发布 | 次日可用 |\n| 北向资金 | 当日收盘后发布 | 次日可用 |",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.030090497737556562
+        },
+        {
+          "chunk_id": "4fb14ff8c80c09306da063bb",
+          "source": "fund-platform/docs/用户画像测评问卷+打分规则.docx",
+          "source_name": "用户画像测评问卷+打分规则.docx",
+          "section": "一、个题目选项分值 / 2.第9题为多选题，以所选选项中最高分值计分，不累计加分",
+          "doc_date": "2026-07-27",
+          "authority": "authoritative",
+          "text": "2.第9题为多选题，以所选选项中最高分值计分，不累计加分\n3.第7题分值设置逻辑：无债务（10分）→长期债务（7分）→短期债务（4分）→多笔债务压力大（2分），债务负担越重，风险承受能力越低。",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [
+            "<w:numPr xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:wpc=\"http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:wp14=\"http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" xmlns:w10=\"urn:schemas-microsoft-com:office:word\" xmlns:w15=\"http://schemas.microsoft.com/office/word/2012/wordml\" xmlns:wpg=\"http://schemas.microsoft.com/office/word/2010/wordprocessingGroup\" xmlns:wpi=\"http://schemas.microsoft.com/office/word/2010/wordprocessingInk\" xmlns:wne=\"http://schemas.microsoft.com/office/word/2006/wordml\" xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\" xmlns:wpsCustomData=\"http://www.wps.cn/officeDocument/2013/wpsCustomData\">\n  <w:numId w:val=\"0\"/>\n</w:numPr>\n"
+          ],
+          "score": 0.02964426877470356
+        }
+      ],
+      "backends": [
+        "hybrid"
+      ],
+      "llm_events": [
+        {
+          "stage": "router",
+          "status": "success"
+        },
+        {
+          "stage": "compose",
+          "status": "success"
+        },
+        {
+          "stage": "compose",
+          "status": "success"
+        }
+      ],
+      "fails": [],
+      "latency_s": 14.75
+    },
+    {
+      "id": "Q04",
+      "question": "情绪打分规则中，两融变化±5%和北向净流入±500亿如何计分？",
+      "answer": "情绪：两融变化≥+5%得10分，≤-5%得0分，其间按10×(变化率+5)/10线性计分；北向净流入≥+500亿得10分，≤-500亿得0分，其间按10×(净流入+500)/1000线性计分；两项合计0-20分。  \n  \n仅为规则说明，。不构成投资建议。\n[来源: 评分系统金融规则.docx §二、维度打分函数 / 维度三：情绪（20%）]",
+      "source": "fund-platform/docs/评分系统金融规则.docx",
+      "source_quote": "# 北向部分（满分10分）：净流入越多越好",
+      "golden_answer": "维度三：情绪（20%）\n数据支撑：两融余额反映杠杆资金情绪，北向资金是外资风向标。情绪指标在资产配置模型中通常占15-25%权重。\n函数：\ndef calc_sent_score(margin_change, north_flow):\n\"\"\"\nmargin_change: 两融余额月度变化率（%）\nnorth_flow: 北向资金当月累计净流入（亿元）\n输出: 0-20分\n\"\"\"\n# 两融部分（满分10分）：变化率越大越乐观\nif margin_change >= 5.0:\nmargin_score = 10.0\nelif margin_change <= -5.0:\nmargin_score = 0.0\nelse:\nmargin_score = 10.0 * (margin_change + 5.0) / 10.0\n# 北向部分（满分10分）：净流入越多越好\nif north_flow >= 500:\nnorth_score = 10.0\nelif north_flow <= -500:\nnorth_score = 0.0\nelse:\nnorth_score = 10.0 * (north_flow + 500) / 1000.0\nreturn margin_score + north_score\n依据：\n1.两融阈值±5%：参考两融余额月度波动的历史分位数\n2.北向阈值±500亿：参考北向资金月度净流入的历史均值波动范围",
+      "caveat": null,
+      "recall_at_5": true,
+      "citation_valid": true,
+      "expected_source_cited": true,
+      "keyword_hits": 2,
+      "keyword_total": 2,
+      "verified": true,
+      "tool_calls": [
+        {
+          "name": "search_docs",
+          "args": {
+            "query": "情绪打分规则 两融变化 ±5% 北向净流入 ±500亿 如何计分",
+            "top_k": 10
+          },
+          "ok": true
+        }
+      ],
+      "retrieved": [
+        {
+          "chunk_id": "81934e88be868b45072ec4af",
+          "source": "fund-platform/docs/评分系统金融规则.docx",
+          "source_name": "评分系统金融规则.docx",
+          "section": "二、维度打分函数 / 维度三：情绪（20%）",
+          "doc_date": "2026-07-23",
+          "authority": "authoritative",
+          "text": "维度三：情绪（20%）\n数据支撑：两融余额反映杠杆资金情绪，北向资金是外资风向标。情绪指标在资产配置模型中通常占15-25%权重。\n函数：\ndef calc_sent_score(margin_change, north_flow):\n\"\"\"\nmargin_change: 两融余额月度变化率（%）\nnorth_flow: 北向资金当月累计净流入（亿元）\n输出: 0-20分\n\"\"\"\n# 两融部分（满分10分）：变化率越大越乐观\nif margin_change >= 5.0:\nmargin_score = 10.0\nelif margin_change <= -5.0:\nmargin_score = 0.0\nelse:\nmargin_score = 10.0 * (margin_change + 5.0) / 10.0\n# 北向部分（满分10分）：净流入越多越好\nif north_flow >= 500:\nnorth_score = 10.0\nelif north_flow <= -500:\nnorth_score = 0.0\nelse:\nnorth_score = 10.0 * (north_flow + 500) / 1000.0\nreturn margin_score + north_score\n依据：\n1.两融阈值±5%：参考两融余额月度波动的历史分位数\n2.北向阈值±500亿：参考北向资金月度净流入的历史均值波动范围",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [
+            "<w:numPr xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:wpc=\"http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:wp14=\"http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" xmlns:w10=\"urn:schemas-microsoft-com:office:word\" xmlns:w15=\"http://schemas.microsoft.com/office/word/2012/wordml\" xmlns:wpg=\"http://schemas.microsoft.com/office/word/2010/wordprocessingGroup\" xmlns:wpi=\"http://schemas.microsoft.com/office/word/2010/wordprocessingInk\" xmlns:wne=\"http://schemas.microsoft.com/office/word/2006/wordml\" xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\" xmlns:wpsCustomData=\"http://www.wps.cn/officeDocument/2013/wpsCustomData\">\n  <w:ilvl w:val=\"0\"/>\n  <w:numId w:val=\"1\"/>\n</w:numPr>\n"
+          ],
+          "score": 0.03278688524590164
+        },
+        {
+          "chunk_id": "ae586eeccf309207cc6f744c",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 二、市场评分系统（全项目的\"骨架\"，xf 主讲你兜底）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "## 二、市场评分系统（全项目的\"骨架\"，xf 主讲你兜底）  \n四维打分（权重来自 xf 金融规则文档）：**估值 25**（沪深300 PE 5 年分位：≤30% 满分、≥70% 零分）+ **宏观 25**（PMI 与 10Y-2Y 利差）+ **情绪 20**（两融变化、北向）+ **趋势 30**（价格偏离 MA20）。\n五态映射：**≥75 上行 / 60-74 震荡偏强 / 45-59 震荡 / 30-44 下行 / <30 极寒**。\n稳健性证据：**权重 ±5% 随机扰动 100 次，状态标签一致率均值 92.6%、最低 84.4%**（`scripts/sensitivity_analysis.py` 实跑可复现）。\n**关键**：评分输出\"状态\"，状态决定权益中枢（见下），**这是所有策略共同的仓位层**。  \n---",
+          "styles": [],
+          "numbering": [],
+          "score": 0.03225806451612903
+        },
+        {
+          "chunk_id": "dd88a6a03cec73236babc884",
+          "source": "fund-platform/docs/评分系统金融规则.docx",
+          "source_name": "评分系统金融规则.docx",
+          "section": "一、填入数据要求",
+          "doc_date": "2026-07-23",
+          "authority": "authoritative",
+          "text": "一、填入数据要求\n| 维度 | 所需数据列 |\n| --- | --- |\n| 估值 | 沪深300PE_TTM、沪深300PE_5年分位、中证500PE_TTM、中证500PE_5年分位 |\n| 宏观 | PMI（月度）、10Y-2Y国债利差（日度） |\n| 情绪 | 两融余额（日度）、北向资金净流入（日度） |\n| 趋势 | 沪深300收盘价、MA20 |",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.03125763125763126
+        },
+        {
+          "chunk_id": "7d669dcaad88293337f5fb41",
+          "source": "fund-platform/docs/用户画像测评问卷+打分规则.docx",
+          "source_name": "用户画像测评问卷+打分规则.docx",
+          "section": "一、个题目选项分值",
+          "doc_date": "2026-07-27",
+          "authority": "authoritative",
+          "text": "一、个题目选项分值\n计分说明：",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.029631255487269532
+        },
+        {
+          "chunk_id": "f74c4ba794059054cde9c22a",
+          "source": "fund-platform/docs/评分系统金融规则.docx",
+          "source_name": "评分系统金融规则.docx",
+          "section": "二、维度打分函数",
+          "doc_date": "2026-07-23",
+          "authority": "authoritative",
+          "text": "二、维度打分函数",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.029513888888888888
+        }
+      ],
+      "backends": [
+        "hybrid"
+      ],
+      "llm_events": [
+        {
+          "stage": "router",
+          "status": "success"
+        },
+        {
+          "stage": "compose",
+          "status": "success"
+        }
+      ],
+      "fails": [],
+      "latency_s": 6.55
+    },
+    {
+      "id": "Q05",
+      "question": "趋势分如何将价格偏离MA20的±5%映射为0至30分？",
+      "answer": "趋势分：deviation=(price/ma20-1)*100。deviation≥5.0返回30.0；≤-5.0返回0.0；否则返回30.0*(deviation+5.0)/10.0，即-5%至+5%线性映射到0至30分。阈值±5%视为趋势确立。 不构成个性化投资建议。不构成投资建议。\n[来源: 评分系统金融规则.docx §二、维度打分函数 / 维度四：趋势（30%，权重最高）]",
+      "source": "fund-platform/docs/评分系统金融规则.docx",
+      "source_quote": "# 价格相对于MA20的偏离度",
+      "golden_answer": "维度四：趋势（30%，权重最高）\n数据支撑：趋势跟踪是量化里最朴素但长期有效的策略。趋势维度在择时策略中通常赋予最高权重，因为“趋势一旦形成，短期不易逆转”。\n函数：\ndef calc_trend_score(price, ma20):\n\"\"\"\nprice: 当日收盘价\nma20: 20日均线\n输出: 0-30分\n\"\"\"\n# 价格相对于MA20的偏离度\ndeviation = (price / ma20 - 1) * 100  # 百分比\nif deviation >= 5.0:\nreturn 30.0\nelif deviation <= -5.0:\nreturn 0.0\nelse:\nreturn 30.0 * (deviation + 5.0) / 10.0\n依据：\n1.阈值±5%：价格偏离MA20超过5%通常被视为趋势确立的信号\n2.满分30分：对应30%的最高权重——趋势是四维中最具预测力的维度",
+      "caveat": null,
+      "recall_at_5": true,
+      "citation_valid": true,
+      "expected_source_cited": true,
+      "keyword_hits": 2,
+      "keyword_total": 2,
+      "verified": true,
+      "tool_calls": [
+        {
+          "name": "search_docs",
+          "args": {
+            "query": "趋势分 价格偏离MA20 ±5% 映射 0至30分 计算规则",
+            "top_k": 5
+          },
+          "ok": true
+        }
+      ],
+      "retrieved": [
+        {
+          "chunk_id": "fe84cc7785d57d00fc099a62",
+          "source": "fund-platform/docs/评分系统金融规则.docx",
+          "source_name": "评分系统金融规则.docx",
+          "section": "二、维度打分函数 / 维度四：趋势（30%，权重最高）",
+          "doc_date": "2026-07-23",
+          "authority": "authoritative",
+          "text": "维度四：趋势（30%，权重最高）\n数据支撑：趋势跟踪是量化里最朴素但长期有效的策略。趋势维度在择时策略中通常赋予最高权重，因为“趋势一旦形成，短期不易逆转”。\n函数：\ndef calc_trend_score(price, ma20):\n\"\"\"\nprice: 当日收盘价\nma20: 20日均线\n输出: 0-30分\n\"\"\"\n# 价格相对于MA20的偏离度\ndeviation = (price / ma20 - 1) * 100  # 百分比\nif deviation >= 5.0:\nreturn 30.0\nelif deviation <= -5.0:\nreturn 0.0\nelse:\nreturn 30.0 * (deviation + 5.0) / 10.0\n依据：\n1.阈值±5%：价格偏离MA20超过5%通常被视为趋势确立的信号\n2.满分30分：对应30%的最高权重——趋势是四维中最具预测力的维度",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.03278688524590164
+        },
+        {
+          "chunk_id": "983248d0b9d8484855e4d662",
+          "source": "fund-platform/docs/评分系统金融规则.docx",
+          "source_name": "评分系统金融规则.docx",
+          "section": "三、综合分与状态映射",
+          "doc_date": "2026-07-23",
+          "authority": "authoritative",
+          "text": "三、综合分与状态映射\n总分 = val_score + macro_score + sent_score + trend_score\n# 注：四个维度得分之和自动等于100分（25+25+20+30=100）\n| 总分区间 | 状态标签 | 含义 |\n| --- | --- | --- |\n| ≥75 | 上行 | 牛市/强势上涨 |\n| 60-74 | 震荡偏强 | 结构性行情，偏多 |\n| 45-59 | 震荡 | 横盘整理，方向不明 |\n| 30-44 | 下行 | 熊市/弱势下跌 |\n| ＜30 | 极寒 | 恐慌/流动性危机 |",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.03200204813108039
+        },
+        {
+          "chunk_id": "ae586eeccf309207cc6f744c",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 二、市场评分系统（全项目的\"骨架\"，xf 主讲你兜底）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "## 二、市场评分系统（全项目的\"骨架\"，xf 主讲你兜底）  \n四维打分（权重来自 xf 金融规则文档）：**估值 25**（沪深300 PE 5 年分位：≤30% 满分、≥70% 零分）+ **宏观 25**（PMI 与 10Y-2Y 利差）+ **情绪 20**（两融变化、北向）+ **趋势 30**（价格偏离 MA20）。\n五态映射：**≥75 上行 / 60-74 震荡偏强 / 45-59 震荡 / 30-44 下行 / <30 极寒**。\n稳健性证据：**权重 ±5% 随机扰动 100 次，状态标签一致率均值 92.6%、最低 84.4%**（`scripts/sensitivity_analysis.py` 实跑可复现）。\n**关键**：评分输出\"状态\"，状态决定权益中枢（见下），**这是所有策略共同的仓位层**。  \n---",
+          "styles": [],
+          "numbering": [],
+          "score": 0.031754032258064516
+        },
+        {
+          "chunk_id": "2bebe01a307417d68be2f456",
+          "source": "fund-platform/docs/评分系统金融规则.docx",
+          "source_name": "评分系统金融规则.docx",
+          "section": "二、维度打分函数 / 维度一：估值（目前定为25%）",
+          "doc_date": "2026-07-23",
+          "authority": "authoritative",
+          "text": "维度一：估值（目前定为25%）\n数据支撑：当沪深300PE百分位低于30%时，基本都对于应指数的历史低点（2008年底、2011-2014年、2016年底、2018年底）。PE百分位高于70%则进入高估区间。\ndef calc_val_score(pe_pct):\n\"\"\"\npe_pct: 当前PE在5年滚动窗口的历史分位数（0-1之间）\n输出: 0-25分\n\"\"\"\nif pe_pct <= 0.30:\nreturn 25.0                    # 极度低估，满分\nelif pe_pct >= 0.70:\nreturn 0.0                     # 高估，零分\nelse:\n# 30%-70%之间线性插值：从25分线性降到0分\nreturn 25.0 * (1 - (pe_pct - 0.30) / 0.40)\n依据：\n1.阈值30%/70%：来自市场通行的估值分位数规则（参考理杏仁https://blog.realduang.com/blogs/financial-analysis/2026-02-22.html#%E7%BB%93%E8%AF%AD）\n2.满分25分：对应25%的权重\n3.线性插值：最简单的映射方法",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.03149801587301587
+        },
+        {
+          "chunk_id": "dd868110114c42dc7ef1c672",
+          "source": "fund-platform/README.md",
+          "source_name": "README.md",
+          "section": "工行杯 · 指数基金智能配置决策平台 / 项目进度 (Week 1) / 分段回测关键发现（6 阶段 × 主要策略，统一回测框架口径）",
+          "doc_date": "2026-11-07",
+          "authority": "authoritative",
+          "text": "### 分段回测关键发现（6 阶段 × 主要策略，统一回测框架口径）\n| 阶段 | 天数 | 等权 | 动态评分 | LGB融合 | MVO | 核心结论 |\n|------|------|------|---------|---------|-----|---------|\n| 2015 牛市 | 108 | +146% | +81% | +65% | +191% | 牛市保守策略跑输，MVO 杠杆效应放大 |\n| 2015 股灾 | 155 | **-35%** | **-7%** | **-7%** | -32% | 动态评分减仓保护最显著，回撤仅为等权的 1/3 |\n| 2016-2017 慢牛 | 488 | +42% | +36% | +32% | +31% | 等权领跑，策略间差异不大 |\n| 2018 熊市 | 227 | -16% | **-5%** | -11% | -9% | 动态评分最佳，纯规则在熊市减仓决策最及时 |\n| 2019-2020 牛市 | 513 | +66% | +47% | +43% | +45% | 动量最强 +89%，牛市趋势策略占优 |\n| **2021 后震荡** | **1307** | **+7.5%** | **+15.5%** | **+32.2%** | **+29.2%** | **占回测一半时间；融合/评分策略保持显著超额** |  ",
+          "styles": [],
+          "numbering": [],
+          "score": 0.028484848484848488
+        }
+      ],
+      "backends": [
+        "hybrid"
+      ],
+      "llm_events": [
+        {
+          "stage": "router",
+          "status": "success"
+        },
+        {
+          "stage": "compose",
+          "status": "success"
+        }
+      ],
+      "fails": [],
+      "latency_s": 6.19
+    },
+    {
+      "id": "Q06",
+      "question": "评分规则的总分区间如何映射上行、震荡偏强、震荡、下行、极寒五种状态？",
+      "answer": "总分区间映射：≥75 为上行；60–74 为震荡偏强；45–59 为震荡；30–44 为下行；＜30 为极寒。\n\n\n\n以上为规则说明，不构成个性化投资建议。不构成投资建议。\n[来源: 评分系统金融规则.docx §三、综合分与状态映射]",
+      "source": "fund-platform/docs/评分系统金融规则.docx",
+      "source_quote": "| ≥75 | 上行 | 牛市/强势上涨 |",
+      "golden_answer": "| 总分区间 | 状态标签 | 含义 |\n| --- | --- | --- |\n| ≥75 | 上行 | 牛市/强势上涨 |\n| 60-74 | 震荡偏强 | 结构性行情，偏多 |\n| 45-59 | 震荡 | 横盘整理，方向不明 |\n| 30-44 | 下行 | 熊市/弱势下跌 |\n| ＜30 | 极寒 | 恐慌/流动性危机 |",
+      "caveat": null,
+      "recall_at_5": true,
+      "citation_valid": true,
+      "expected_source_cited": true,
+      "keyword_hits": 5,
+      "keyword_total": 5,
+      "verified": true,
+      "tool_calls": [
+        {
+          "name": "search_docs",
+          "args": {
+            "query": "评分规则 总分区间 映射 上行 震荡偏强 震荡 下行 极寒 五种状态",
+            "top_k": 5
+          },
+          "ok": true
+        }
+      ],
+      "retrieved": [
+        {
+          "chunk_id": "983248d0b9d8484855e4d662",
+          "source": "fund-platform/docs/评分系统金融规则.docx",
+          "source_name": "评分系统金融规则.docx",
+          "section": "三、综合分与状态映射",
+          "doc_date": "2026-07-23",
+          "authority": "authoritative",
+          "text": "三、综合分与状态映射\n总分 = val_score + macro_score + sent_score + trend_score\n# 注：四个维度得分之和自动等于100分（25+25+20+30=100）\n| 总分区间 | 状态标签 | 含义 |\n| --- | --- | --- |\n| ≥75 | 上行 | 牛市/强势上涨 |\n| 60-74 | 震荡偏强 | 结构性行情，偏多 |\n| 45-59 | 震荡 | 横盘整理，方向不明 |\n| 30-44 | 下行 | 熊市/弱势下跌 |\n| ＜30 | 极寒 | 恐慌/流动性危机 |",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.03278688524590164
+        },
+        {
+          "chunk_id": "ae586eeccf309207cc6f744c",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 二、市场评分系统（全项目的\"骨架\"，xf 主讲你兜底）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "## 二、市场评分系统（全项目的\"骨架\"，xf 主讲你兜底）  \n四维打分（权重来自 xf 金融规则文档）：**估值 25**（沪深300 PE 5 年分位：≤30% 满分、≥70% 零分）+ **宏观 25**（PMI 与 10Y-2Y 利差）+ **情绪 20**（两融变化、北向）+ **趋势 30**（价格偏离 MA20）。\n五态映射：**≥75 上行 / 60-74 震荡偏强 / 45-59 震荡 / 30-44 下行 / <30 极寒**。\n稳健性证据：**权重 ±5% 随机扰动 100 次，状态标签一致率均值 92.6%、最低 84.4%**（`scripts/sensitivity_analysis.py` 实跑可复现）。\n**关键**：评分输出\"状态\"，状态决定权益中枢（见下），**这是所有策略共同的仓位层**。  \n---",
+          "styles": [],
+          "numbering": [],
+          "score": 0.03225806451612903
+        },
+        {
+          "chunk_id": "97cc8620df82a1cb061fb629",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 三、LGB 板块（★ 你主答辩，重点吃透） / 3.5 三层融合架构（可解释性卖点，逐层能讲）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "### 3.5 三层融合架构（可解释性卖点，逐层能讲）  \n1. **仓位层（规则）**：五状态 → 权益中枢 **55% / 45% / 35% / 15% / 5%**（上行→极寒）。**作用是\"总开关\"**——LGB 只能在给定中枢内分配。\n2. **选券层（ML）**：权益内部用 LGB 预测 → **Softmax（温度 0.5）** 转权重。**为什么用 Softmax 不用直接归一**：Softmax 对预测差异有\"温度\"控制——温度越低越集中；**0.5 是扫描后的平衡点**（既表达排序，又避免单票重注）。\n3. **避险层（规则）**：黄金+国债用**波动率倒数加权**（风险平价的解析近似）。**为什么不用 1/N**：黄金与国债波动差异大（黄金 ~15% vs 国债 ~2%），等权会让组合波动被黄金主导。\n4. **三档落地（C2/C3/C4）**：`platform/lgb_infer_runtime.py` 支持传入风险档 → 把 LGB 权重按目标中枢缩放（C2 20% / C3 50% / C4 70%，与离线三档口径一致）；三档数字见 §五。  \n**话术示例**：\"现在持仓 35%，因为评分处于震荡态；芯片权重最高，因为 LGB 预测它下月收益最高；黄金+国债做波动率平价对冲——**每一层都能单独解释**。\"",
+          "styles": [],
+          "numbering": [],
+          "score": 0.03055037313432836
+        },
+        {
+          "chunk_id": "62717ac08717450824b4faa5",
+          "source": "fund-platform/README.md",
+          "source_name": "README.md",
+          "section": "工行杯 · 指数基金智能配置决策平台 / 项目进度 (Week 1) / 分段回测关键发现（6 阶段 × 主要策略，统一回测框架口径）",
+          "doc_date": "2026-11-07",
+          "authority": "authoritative",
+          "text": "三个答辩级发现：  \n1. **2021 年后 1307 天震荡期（占回测一半）**：等权仅 +7.5%，动态评分 +15.5%、LGB 融合 **+32.2%** —— \"市场状态分类 → 差异化配置\"最有力的证据。\n2. **MVO 在 2021 年后 +29.2% 但回撤 -20.2%**：风险调整后不占优，印证\"纯 MVO 需要规则约束\"。\n3. **动态评分在 2015 股灾回撤 -13.6%（等权 -35.4%）**：仓位择时（45%→15%）在极端行情下效果最突出。",
+          "styles": [],
+          "numbering": [],
+          "score": 0.030330882352941176
+        },
+        {
+          "chunk_id": "bf6ebb1b93c2d8a95bb426c8",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 四、PPO / SASF 板块（zt 主讲，你兜底）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "## 四、PPO / SASF 板块（zt 主讲，你兜底）  \n- **环境（MDP）**：观测 **83 维**（44 特征 + 7 当前权重 + 4 评分 + 14 两期历史收益 + 10 序列特征 + 4 行情 one-hot）；动作 7 维连续向量经 Softmax 映射为权重；约束：权重和=1、单资产 [1%, 25%]、债券硬底仓、未上市权重强制 0（**单纯形投影**而非惩罚）。\n- **奖励**：相对规则基准的超额收益 + 多惩罚项（波动/回撤/夏普边际），clip(-5,5)。\n- **两阶段实验**：① Walk-Forward（500 天窗→60 天外推）**严重过拟合**（外样本年化 0.15%）；② **全局训练**有效但早期基线退化为\"82% 权益等权 + 18% 债券\"（26.9%/1.41 是那次评估，**已被第五章诊断否定，不要再引用**）。\n- **消融与集成**：10 组消融（约束→奖励→动作空间→残差 RL→集成）；baseline test 夏普 0.96 → F 残差 RL 1.75；**5-seed 集成 1.747**（方差下降但偏差仍在）。\n- **SASF 硬切换（最终方案）**：**下行/极寒 → 动态评分；其余状态 → PPO**。全时段 **年化 16.52%、夏普 0.601、回撤 -26.56%**，自研方案进攻端最优（夏普略低于 LGB 0.646，但年化高 4.5pp）。\n- **局限（主动讲）**：状态识别有滞后；\"极寒\"样本极少（样本不足难做显著性检验）。  \n---",
+          "styles": [],
+          "numbering": [],
+          "score": 0.030158730158730156
+        }
+      ],
+      "backends": [
+        "hybrid"
+      ],
+      "llm_events": [
+        {
+          "stage": "router",
+          "status": "success"
+        },
+        {
+          "stage": "compose",
+          "status": "success"
+        }
+      ],
+      "fails": [],
+      "latency_s": 5.0
+    },
+    {
+      "id": "Q07",
+      "question": "评分规则中PE、PMI、期限利差、两融与北向数据何时可用于回测？",
+      "answer": "按《评分系统金融规则.docx》§四：PE/PB分位数当日可用（收盘价计算）；PMI当月最后一天可用；10Y-2Y利差次日可用；两融余额次日可用；北向资金次日可用。\n\n注意：手册另称PMI等月度宏观滞后30个交易日，与上述“当月最后一天可用”存在矛盾，原值照录；北向2024-08-19后停披露，置NaN并给中性分。\n\n  \n不提供个性化投资建议。实际数据以数据工具为准。不构成投资建议。\n[source: data/clean/train_total_feature.csv]\n[来源: 评分系统金融规则.docx §四、数据对齐规则]",
+      "source": "fund-platform/docs/评分系统金融规则.docx",
+      "source_quote": "| 北向资金 | 当日收盘后发布 | 次日可用 |",
+      "golden_answer": "| 数据项 | 发布规则 | 回测中可用时间 |\n| --- | --- | --- |\n| PE/PB分位数 | 每日收盘后更新 | 当日可用（用收盘价计算） |\n| PMI | 当月最后一天发布 | 当月最后一天可用 |\n| 10Y-2Y利差 | 每日17:30发布 | 次日可用 |\n| 两融余额 | 次日清晨发布 | 次日可用 |\n| 北向资金 | 当日收盘后发布 | 次日可用 |",
+      "caveat": "这里只回答评分规则原文；实际宏观滞后对齐以get_data_caveats和源码为准。",
+      "recall_at_5": true,
+      "citation_valid": true,
+      "expected_source_cited": true,
+      "keyword_hits": 4,
+      "keyword_total": 4,
+      "verified": true,
+      "tool_calls": [
+        {
+          "name": "search_docs",
+          "args": {
+            "query": "评分规则中PE、PMI、期限利差、两融与北向数据何时可用于回测 前视偏差 发布滞后",
+            "top_k": 8
+          },
+          "ok": true
+        },
+        {
+          "name": "get_data_caveats",
+          "args": {},
+          "ok": true
+        }
+      ],
+      "retrieved": [
+        {
+          "chunk_id": "3c8ae443290b52a5a64077b9",
+          "source": "fund-platform/docs/评分系统金融规则.docx",
+          "source_name": "评分系统金融规则.docx",
+          "section": "四、数据对齐规则",
+          "doc_date": "2026-07-23",
+          "authority": "authoritative",
+          "text": "四、数据对齐规则\n| 数据项 | 发布规则 | 回测中可用时间 |\n| --- | --- | --- |\n| PE/PB分位数 | 每日收盘后更新 | 当日可用（用收盘价计算） |\n| PMI | 当月最后一天发布 | 当月最后一天可用 |\n| 10Y-2Y利差 | 每日17:30发布 | 次日可用 |\n| 两融余额 | 次日清晨发布 | 次日可用 |\n| 北向资金 | 当日收盘后发布 | 次日可用 |",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.03278688524590164
+        },
+        {
+          "chunk_id": "9c311c0fda250cb94226d3d8",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 一、资产池与数据链（被问先讲这层） / 1.5 两个真实数据问题（老师揪过，答辩必讲）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "### 1.5 两个真实数据问题（老师揪过，答辩必讲）  \n**① 北向资金 2024-08-19 后停披露** → 置 **NaN**，评分时给中性分；**绝不用 0 填充**（0 是错误信息，会污染情绪维度）。\n话术：\"**缺失是真实的，伪造是错误**——我们宁可让模型知道'这里没数据'。\"\n**② 月度宏观的前视风险**（PMI/CPI/M2 都是次月才发布）→ 全部**滞后 30 个交易日**使用。\n话术：\"3 月 CPI 要 4 月才公布，我们不会在 3 月 15 日就'知道'它。\"修正前后**策略排名与结论保持不变**（稳健性证据）。",
+          "styles": [],
+          "numbering": [],
+          "score": 0.03225806451612903
+        },
+        {
+          "chunk_id": "ae586eeccf309207cc6f744c",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 二、市场评分系统（全项目的\"骨架\"，xf 主讲你兜底）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "## 二、市场评分系统（全项目的\"骨架\"，xf 主讲你兜底）  \n四维打分（权重来自 xf 金融规则文档）：**估值 25**（沪深300 PE 5 年分位：≤30% 满分、≥70% 零分）+ **宏观 25**（PMI 与 10Y-2Y 利差）+ **情绪 20**（两融变化、北向）+ **趋势 30**（价格偏离 MA20）。\n五态映射：**≥75 上行 / 60-74 震荡偏强 / 45-59 震荡 / 30-44 下行 / <30 极寒**。\n稳健性证据：**权重 ±5% 随机扰动 100 次，状态标签一致率均值 92.6%、最低 84.4%**（`scripts/sensitivity_analysis.py` 实跑可复现）。\n**关键**：评分输出\"状态\"，状态决定权益中枢（见下），**这是所有策略共同的仓位层**。  \n---",
+          "styles": [],
+          "numbering": [],
+          "score": 0.031024531024531024
+        },
+        {
+          "chunk_id": "40d2d91334d39acb634f7511",
+          "source": "fund-platform/docs/评分系统金融规则.docx",
+          "source_name": "评分系统金融规则.docx",
+          "section": "二、维度打分函数 / 维度二：宏观（25%）",
+          "doc_date": "2026-07-23",
+          "authority": "authoritative",
+          "text": "维度二：宏观（25%）\n数据支撑：美林时钟将经济周期划分为衰退、复苏、过热、滞胀四个阶段，对应不同资产配置。在中国实践中，PMI是判断经济强弱的核心指标。期限利差（10Y-2Y）反映经济预期，利差收窄甚至倒挂通常预示经济衰退风险。\n函数：\ndef calc_macro_score(pmi, spread_10y2y):\n\"\"\"\npmi: 制造业PMI（通常45-55之间）\nspread_10y2y: 10年期国债收益率 - 2年期国债收益率（单位：%）\n输出: 0-25分\n\"\"\"\n# PMI部分（满分15分）：50为荣枯线\nif pmi >= 52:\npmi_score = 15.0\nelif pmi <= 48:\npmi_score = 0.0\nelse:\npmi_score = 15.0 * (pmi - 48) / 4.0   # 48→0分, 52→15分\n# 期限利差部分（满分10分）：利差越大越好\nif spread_10y2y >= 1.0:\nspread_score = 10.0\nelif spread_10y2y <= -0.5:\nspread_score = 0.0\nelse:\nspread_score = 10.0 * (spread_10y2y + 0.5) / 1.5\nreturn pmi_score + spread_score\n依据：\n1.PMI阈值是48/52:50是荣枯线，±2作为缓冲区间\n2.利差阈值-0.5%/1.0%：利差倒挂（负值）是衰退信号，利差>1%表示经济预期良好",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.031009615384615385
+        },
+        {
+          "chunk_id": "bbf3de2830aa44c601e684d3",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 三、LGB 板块（★ 你主答辩，重点吃透） / 3.9 防前视（老师最关心）+ 主动披露",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "### 3.9 防前视（老师最关心）+ 主动披露  \n**四层防线**：① 宏观按发布日滞后 30 交易日；② 特征筛选规则只用切割日（2022-12-31）前的数据；③ Walk-Forward 严格时序（预测年只用之前数据）；④ 仅前向填充。\n**⚠️ 主动披露（必讲）**：筛选切割点晚于回测起点 → **2021–2022 段\"被筛选见过\"**。我们做了 **2019 年切割点的严格重跑**：**LGB 夏普 0.59 → 0.42**（优势部分依赖前视），**动态评分不受影响**。\n**话术**：\"规则路线稳健；ML 路线我们把真实影响如实报告——**这是方法论诚实，不是缺陷掩盖**。\"",
+          "styles": [],
+          "numbering": [],
+          "score": 0.02964426877470356
+        }
+      ],
+      "backends": [
+        "hybrid"
+      ],
+      "llm_events": [
+        {
+          "stage": "router",
+          "status": "success"
+        },
+        {
+          "stage": "compose",
+          "status": "success"
+        }
+      ],
+      "fails": [],
+      "latency_s": 7.22
+    },
+    {
+      "id": "Q08",
+      "question": "根据风险等级划分规则，C1到C5各自可以购买哪些产品风险等级？",
+      "answer": "按匹配规则：C1仅限R1；C2可购R1、R2；C3可购R1、R2、R3；C4可购R1、R2、R3、R4；C5可购所有等级R1-R5。专业投资者不受限制；发行方与销售方评级不同时遵循“孰高原则”。\n\n\n\n以上仅为规则说明，。不构成投资建议。\n[来源: 风险等级划分规则.docx §3.匹配规则]",
+      "source": "fund-platform/docs/风险等级划分规则.docx",
+      "source_quote": "| C5 (激进型) | 所有等级 (R1-R5)（如期货、期权等） |",
+      "golden_answer": "| 投资者等级 | 可购买产品等级 |\n| --- | --- |\n| C1 (保守型) | 仅限 R1（如货币基金） |\n| C2 (稳健型) | R1、R2（如债券基金） |\n| C3 (平衡型) | R1、R2、R3（如混合基金） |\n| C4 (积极型) | R1、R2、R3、R4（如股票基金） |\n| C5 (激进型) | 所有等级 (R1-R5)（如期货、期权等） |",
+      "caveat": null,
+      "recall_at_5": true,
+      "citation_valid": true,
+      "expected_source_cited": true,
+      "keyword_hits": 7,
+      "keyword_total": 7,
+      "verified": true,
+      "tool_calls": [
+        {
+          "name": "search_docs",
+          "args": {
+            "query": "风险等级划分规则 C1 C2 C3 C4 C5 可购买产品风险等级 匹配",
+            "top_k": 5
+          },
+          "ok": true
+        }
+      ],
+      "retrieved": [
+        {
+          "chunk_id": "25adbb697a1a1b52d25f7393",
+          "source": "fund-platform/docs/风险等级划分规则.docx",
+          "source_name": "风险等级划分规则.docx",
+          "section": "2.风险等级划分：统一的“五级”标准",
+          "doc_date": "2026-07-27",
+          "authority": "authoritative",
+          "text": "2.风险等级划分：统一的“五级”标准\n| 维度 | 等级划分(由低到高) |\n| --- | --- |\n| 投资者风险等级 | C1 (保守型) → C2 (稳健型) → C3 (平衡型) → C4 (积极型) → C5 (激进型) |\n| 产品风险等级 | R1 (低风险) → R2 (中低风险) → R3 (中风险) → R4 (中高风险) → R5 (高风险) |",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.03278688524590164
+        },
+        {
+          "chunk_id": "3fa9cd677ef2ad912301cd1c",
+          "source": "fund-platform/docs/用户画像测评问卷+打分规则.docx",
+          "source_name": "用户画像测评问卷+打分规则.docx",
+          "section": "二、总分与风险等级对应关系",
+          "doc_date": "2026-07-27",
+          "authority": "authoritative",
+          "text": "二、总分与风险等级对应关系\n问卷满分为148分（第7题满分10分 + 其余14题各10分 + 第9题额外加2分封顶 = 148分）。\n| 测评总分 | 风险承受能力等级 | 等级描述 |\n| --- | --- | --- |\n| 20分及以下 | C1 | 保守型 — 风险承受能力极低，仅适合低风险产品 |\n| 21 - 40分 | C2 | 谨慎型 — 风险承受能力较低，适合中低风险产品 |\n| 41 - 65分 | C3 | 稳健型 — 风险承受能力中等，适合中风险产品 |\n| 66 - 90分 | C4 | 积极型 — 风险承受能力较高，适合中高风险产品 |\n| 91分及以上 | C5 | 激进型 — 风险承受能力高，可投资所有风险等级产品 |\n特殊认定：若用户在第12题（最大亏损承受）中选择A（不能承受任何亏损）且总分在30分以下，可认定为 “风险承受能力最低类别” ，仅能购买R1级产品。",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.03200204813108039
+        },
+        {
+          "chunk_id": "11d2790f83afe6a911fbbe1e",
+          "source": "fund-platform/docs/风险等级划分规则.docx",
+          "source_name": "风险等级划分规则.docx",
+          "section": "3.匹配规则",
+          "doc_date": "2026-07-27",
+          "authority": "authoritative",
+          "text": "3.匹配规则\n| 投资者等级 | 可购买产品等级 |\n| --- | --- |\n| C1 (保守型) | 仅限 R1（如货币基金） |\n| C2 (稳健型) | R1、R2（如债券基金） |\n| C3 (平衡型) | R1、R2、R3（如混合基金） |\n| C4 (积极型) | R1、R2、R3、R4（如股票基金） |\n| C5 (激进型) | 所有等级 (R1-R5)（如期货、期权等） |\n专业投资者不受限制，若产品发行方与销售方评级不同，遵循“孰高原则”",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.03200204813108039
+        },
+        {
+          "chunk_id": "65bb22073e4d562b02438397",
+          "source": "fund-platform/docs/风险等级划分规则.docx",
+          "source_name": "风险等级划分规则.docx",
+          "section": "正文",
+          "doc_date": "2026-07-27",
+          "authority": "authoritative",
+          "text": "风险匹配规则的核心逻辑是：根据投资者的风险承受能力，向其销售风险等级匹配的金融产品。这套规则主要依据国家金融监督管理总局发布的《金融机构产品适当性管理办法》（2026年2月1日起施行）。",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.031009615384615385
+        },
+        {
+          "chunk_id": "aed63e743eddfa35a9db203d",
+          "source": "fund-platform/docs/风险等级划分规则.docx",
+          "source_name": "风险等级划分规则.docx",
+          "section": "1.核心原则：三大“不匹配”红线",
+          "doc_date": "2026-07-27",
+          "authority": "authoritative",
+          "text": "1.核心原则：三大“不匹配”红线\n根据《办法》第十二条，以下情况属于“不具备适当性”，金融机构不得向投资者销售产品：\n风险等级不匹配：产品风险等级高于投资者风险承受能力。\n财务状况不匹配：购买产品的资金与投资者的财务支付水平明显不匹配。\n其他明显不合适：投资者因年龄、认知能力等原因对产品存在重大理解障碍等。",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [
+            "<w:numPr xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:wpc=\"http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:wp14=\"http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" xmlns:w10=\"urn:schemas-microsoft-com:office:word\" xmlns:w15=\"http://schemas.microsoft.com/office/word/2012/wordml\" xmlns:wpg=\"http://schemas.microsoft.com/office/word/2010/wordprocessingGroup\" xmlns:wpi=\"http://schemas.microsoft.com/office/word/2010/wordprocessingInk\" xmlns:wne=\"http://schemas.microsoft.com/office/word/2006/wordml\" xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\" xmlns:wpsCustomData=\"http://www.wps.cn/officeDocument/2013/wpsCustomData\">\n  <w:ilvl w:val=\"0\"/>\n  <w:numId w:val=\"1\"/>\n</w:numPr>\n",
+            "<w:numPr xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:wpc=\"http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:wp14=\"http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" xmlns:w10=\"urn:schemas-microsoft-com:office:word\" xmlns:w15=\"http://schemas.microsoft.com/office/word/2012/wordml\" xmlns:wpg=\"http://schemas.microsoft.com/office/word/2010/wordprocessingGroup\" xmlns:wpi=\"http://schemas.microsoft.com/office/word/2010/wordprocessingInk\" xmlns:wne=\"http://schemas.microsoft.com/office/word/2006/wordml\" xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\" xmlns:wpsCustomData=\"http://www.wps.cn/officeDocument/2013/wpsCustomData\">\n  <w:ilvl w:val=\"0\"/>\n  <w:numId w:val=\"1\"/>\n</w:numPr>\n",
+            "<w:numPr xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:wpc=\"http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:wp14=\"http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" xmlns:w10=\"urn:schemas-microsoft-com:office:word\" xmlns:w15=\"http://schemas.microsoft.com/office/word/2012/wordml\" xmlns:wpg=\"http://schemas.microsoft.com/office/word/2010/wordprocessingGroup\" xmlns:wpi=\"http://schemas.microsoft.com/office/word/2010/wordprocessingInk\" xmlns:wne=\"http://schemas.microsoft.com/office/word/2006/wordml\" xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\" xmlns:wpsCustomData=\"http://www.wps.cn/officeDocument/2013/wpsCustomData\">\n  <w:ilvl w:val=\"0\"/>\n  <w:numId w:val=\"1\"/>\n</w:numPr>\n"
+          ],
+          "score": 0.030776515151515152
+        }
+      ],
+      "backends": [
+        "hybrid"
+      ],
+      "llm_events": [
+        {
+          "stage": "router",
+          "status": "success"
+        },
+        {
+          "stage": "compose",
+          "status": "success"
+        }
+      ],
+      "fails": [],
+      "latency_s": 4.23
+    },
+    {
+      "id": "Q09",
+      "question": "风险匹配规则中，三大“不匹配”红线是什么？",
+      "answer": "三大“不匹配”红线为：\n\n1. **风险等级不匹配**：产品风险等级高于投资者风险承受能力。\n2. **财务状况不匹配**：购买产品的资金与投资者的财务支付水平明显不匹配。\n3. **其他明显不合适**：投资者因年龄、认知能力等原因对产品存在重大理解障碍等。不构成投资建议。\n[来源: 风险等级划分规则.docx §1.核心原则：三大“不匹配”红线]",
+      "source": "fund-platform/docs/风险等级划分规则.docx",
+      "source_quote": "风险等级不匹配：产品风险等级高于投资者风险承受能力。",
+      "golden_answer": "1.核心原则：三大“不匹配”红线\n根据《办法》第十二条，以下情况属于“不具备适当性”，金融机构不得向投资者销售产品：\n风险等级不匹配：产品风险等级高于投资者风险承受能力。\n财务状况不匹配：购买产品的资金与投资者的财务支付水平明显不匹配。\n其他明显不合适：投资者因年龄、认知能力等原因对产品存在重大理解障碍等。",
+      "caveat": null,
+      "recall_at_5": true,
+      "citation_valid": true,
+      "expected_source_cited": true,
+      "keyword_hits": 3,
+      "keyword_total": 3,
+      "verified": true,
+      "tool_calls": [
+        {
+          "name": "search_docs",
+          "args": {
+            "query": "风险匹配规则 三大不匹配红线 是什么",
+            "top_k": 8
+          },
+          "ok": true
+        }
+      ],
+      "retrieved": [
+        {
+          "chunk_id": "aed63e743eddfa35a9db203d",
+          "source": "fund-platform/docs/风险等级划分规则.docx",
+          "source_name": "风险等级划分规则.docx",
+          "section": "1.核心原则：三大“不匹配”红线",
+          "doc_date": "2026-07-27",
+          "authority": "authoritative",
+          "text": "1.核心原则：三大“不匹配”红线\n根据《办法》第十二条，以下情况属于“不具备适当性”，金融机构不得向投资者销售产品：\n风险等级不匹配：产品风险等级高于投资者风险承受能力。\n财务状况不匹配：购买产品的资金与投资者的财务支付水平明显不匹配。\n其他明显不合适：投资者因年龄、认知能力等原因对产品存在重大理解障碍等。",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [
+            "<w:numPr xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:wpc=\"http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:wp14=\"http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" xmlns:w10=\"urn:schemas-microsoft-com:office:word\" xmlns:w15=\"http://schemas.microsoft.com/office/word/2012/wordml\" xmlns:wpg=\"http://schemas.microsoft.com/office/word/2010/wordprocessingGroup\" xmlns:wpi=\"http://schemas.microsoft.com/office/word/2010/wordprocessingInk\" xmlns:wne=\"http://schemas.microsoft.com/office/word/2006/wordml\" xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\" xmlns:wpsCustomData=\"http://www.wps.cn/officeDocument/2013/wpsCustomData\">\n  <w:ilvl w:val=\"0\"/>\n  <w:numId w:val=\"1\"/>\n</w:numPr>\n",
+            "<w:numPr xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:wpc=\"http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:wp14=\"http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" xmlns:w10=\"urn:schemas-microsoft-com:office:word\" xmlns:w15=\"http://schemas.microsoft.com/office/word/2012/wordml\" xmlns:wpg=\"http://schemas.microsoft.com/office/word/2010/wordprocessingGroup\" xmlns:wpi=\"http://schemas.microsoft.com/office/word/2010/wordprocessingInk\" xmlns:wne=\"http://schemas.microsoft.com/office/word/2006/wordml\" xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\" xmlns:wpsCustomData=\"http://www.wps.cn/officeDocument/2013/wpsCustomData\">\n  <w:ilvl w:val=\"0\"/>\n  <w:numId w:val=\"1\"/>\n</w:numPr>\n",
+            "<w:numPr xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:wpc=\"http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:wp14=\"http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" xmlns:w10=\"urn:schemas-microsoft-com:office:word\" xmlns:w15=\"http://schemas.microsoft.com/office/word/2012/wordml\" xmlns:wpg=\"http://schemas.microsoft.com/office/word/2010/wordprocessingGroup\" xmlns:wpi=\"http://schemas.microsoft.com/office/word/2010/wordprocessingInk\" xmlns:wne=\"http://schemas.microsoft.com/office/word/2006/wordml\" xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\" xmlns:wpsCustomData=\"http://www.wps.cn/officeDocument/2013/wpsCustomData\">\n  <w:ilvl w:val=\"0\"/>\n  <w:numId w:val=\"1\"/>\n</w:numPr>\n"
+          ],
+          "score": 0.03278688524590164
+        },
+        {
+          "chunk_id": "65bb22073e4d562b02438397",
+          "source": "fund-platform/docs/风险等级划分规则.docx",
+          "source_name": "风险等级划分规则.docx",
+          "section": "正文",
+          "doc_date": "2026-07-27",
+          "authority": "authoritative",
+          "text": "风险匹配规则的核心逻辑是：根据投资者的风险承受能力，向其销售风险等级匹配的金融产品。这套规则主要依据国家金融监督管理总局发布的《金融机构产品适当性管理办法》（2026年2月1日起施行）。",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.03225806451612903
+        },
+        {
+          "chunk_id": "11d2790f83afe6a911fbbe1e",
+          "source": "fund-platform/docs/风险等级划分规则.docx",
+          "source_name": "风险等级划分规则.docx",
+          "section": "3.匹配规则",
+          "doc_date": "2026-07-27",
+          "authority": "authoritative",
+          "text": "3.匹配规则\n| 投资者等级 | 可购买产品等级 |\n| --- | --- |\n| C1 (保守型) | 仅限 R1（如货币基金） |\n| C2 (稳健型) | R1、R2（如债券基金） |\n| C3 (平衡型) | R1、R2、R3（如混合基金） |\n| C4 (积极型) | R1、R2、R3、R4（如股票基金） |\n| C5 (激进型) | 所有等级 (R1-R5)（如期货、期权等） |\n专业投资者不受限制，若产品发行方与销售方评级不同，遵循“孰高原则”",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.03125763125763126
+        },
+        {
+          "chunk_id": "3d1cf5a699faaeedfee340b2",
+          "source": "fund-platform/docs/强化学习.txt",
+          "source_name": "强化学习.txt",
+          "section": "二、各模块详细逻辑链条（逐块拆解） / 5. 传统基准策略对照模块（实验基线）",
+          "doc_date": "2026-07-19",
+          "authority": "background",
+          "text": "5. 传统基准策略对照模块（实验基线）\n三大基准策略不参与模型训练过程，仅在所有RL模型训练完成后，统一进行全区间回测，作为实验对照组，用于量化证明RL模型的优越性。\n三类基准对应不同传统配置范式，实现全方位对比：\n- 等权策略：静态平均配置，代表市场基础收益水平，作为策略有效性的最低评判标尺。\n- 风险平价策略：基于波动率倒数加权，是传统量化主流风控配置方案，代表传统风险优化的上限水平。\n- 动量策略：基于历史收益趋势择时调仓，代表传统主动趋势交易范式。",
+          "styles": [],
+          "numbering": [],
+          "score": 0.03036576949620428
+        },
+        {
+          "chunk_id": "748b630518c1eb41e3307d6f",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 七、陷阱与红线（口径纪律）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "## 七、陷阱与红线（口径纪律）  \n**旧值禁用清单**（全书/PPT 已清理，答辩口头也别用）：26.9%/1.41（PPO 早期，已否证）、19.8%/-16.5%/1.20（动态评分旧口径）、12.4%/-18.8%/0.66（LGB 旧口径）、34.4%/37.1%（震荡段旧值）、94.3%/89.2%（敏感性旧值）、177 维（应为 181）、42 维/51 维（统一表述见上）。  \n**必须用**：LGB 11.99%/0.646/-15.02%；动态评分 13.13%/0.547/-14.27%；SASF 16.52%/0.601/-26.56%；PPO 月度 14.36%/0.473；敏感性 92.6%/84.4%；IC 均值 0.06（时序口径）。  \n**三句兜底话术**：\n1. \"我们的每个数字都可复现——脚本在 `fund-platform/scripts/`，跑一遍就能得到。\"\n2. \"ML 的价值在风险调整后——LGB 夏普 0.646 全场最高；规则路线的价值在回撤——动态评分 -14.27% 全场最小。\"\n3. \"强化学习我们做了完整消融并如实报告局限，最终用 SASF 融合把它变成了可用方案（16.52%/-26.56%）。\"  \n---",
+          "styles": [],
+          "numbering": [],
+          "score": 0.029211087420042643
+        }
+      ],
+      "backends": [
+        "hybrid"
+      ],
+      "llm_events": [
+        {
+          "stage": "router",
+          "status": "success"
+        },
+        {
+          "stage": "compose",
+          "status": "success"
+        }
+      ],
+      "fails": [],
+      "latency_s": 4.29
+    },
+    {
+      "id": "Q10",
+      "question": "用户画像测评问卷的原文满分和C1至C5分数段是什么？",
+      "answer": "原文满分：148分（原文表述为“第7题满分10分 + 其余14题各10分 + 第9题额外加2分封顶 = 148分”，分项与合计存在算术矛盾，照录原值）。\n\n分数段：C1为20分及以下；C2为21-40分；C3为41-65分；C4为66-90分；C5为91分及以上。\n\n\n\n数据口径以数据工具为准；不构成个性化投资建议。实际数据以数据工具为准。不构成投资建议。\n[来源: 用户画像测评问卷+打分规则.docx §二、总分与风险等级对应关系]",
+      "source": "fund-platform/docs/用户画像测评问卷+打分规则.docx",
+      "source_quote": "问卷满分为148分（第7题满分10分 + 其余14题各10分 + 第9题额外加2分封顶 = 148分）。",
+      "golden_answer": "二、总分与风险等级对应关系\n问卷满分为148分（第7题满分10分 + 其余14题各10分 + 第9题额外加2分封顶 = 148分）。\n| 测评总分 | 风险承受能力等级 | 等级描述 |\n| --- | --- | --- |\n| 20分及以下 | C1 | 保守型 — 风险承受能力极低，仅适合低风险产品 |\n| 21 - 40分 | C2 | 谨慎型 — 风险承受能力较低，适合中低风险产品 |\n| 41 - 65分 | C3 | 稳健型 — 风险承受能力中等，适合中风险产品 |\n| 66 - 90分 | C4 | 积极型 — 风险承受能力较高，适合中高风险产品 |\n| 91分及以上 | C5 | 激进型 — 风险承受能力高，可投资所有风险等级产品 |",
+      "caveat": "原文写148分，分项相加为152；答案按原文148分，不自行修正。",
+      "recall_at_5": true,
+      "citation_valid": true,
+      "expected_source_cited": true,
+      "keyword_hits": 5,
+      "keyword_total": 5,
+      "verified": true,
+      "tool_calls": [
+        {
+          "name": "search_docs",
+          "args": {
+            "query": "用户画像测评问卷 原文满分 C1-C5 分数段 划分标准",
+            "top_k": 8
+          },
+          "ok": true
+        }
+      ],
+      "retrieved": [
+        {
+          "chunk_id": "3fa9cd677ef2ad912301cd1c",
+          "source": "fund-platform/docs/用户画像测评问卷+打分规则.docx",
+          "source_name": "用户画像测评问卷+打分规则.docx",
+          "section": "二、总分与风险等级对应关系",
+          "doc_date": "2026-07-27",
+          "authority": "authoritative",
+          "text": "二、总分与风险等级对应关系\n问卷满分为148分（第7题满分10分 + 其余14题各10分 + 第9题额外加2分封顶 = 148分）。\n| 测评总分 | 风险承受能力等级 | 等级描述 |\n| --- | --- | --- |\n| 20分及以下 | C1 | 保守型 — 风险承受能力极低，仅适合低风险产品 |\n| 21 - 40分 | C2 | 谨慎型 — 风险承受能力较低，适合中低风险产品 |\n| 41 - 65分 | C3 | 稳健型 — 风险承受能力中等，适合中风险产品 |\n| 66 - 90分 | C4 | 积极型 — 风险承受能力较高，适合中高风险产品 |\n| 91分及以上 | C5 | 激进型 — 风险承受能力高，可投资所有风险等级产品 |\n特殊认定：若用户在第12题（最大亏损承受）中选择A（不能承受任何亏损）且总分在30分以下，可认定为 “风险承受能力最低类别” ，仅能购买R1级产品。",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.03252247488101534
+        },
+        {
+          "chunk_id": "25adbb697a1a1b52d25f7393",
+          "source": "fund-platform/docs/风险等级划分规则.docx",
+          "source_name": "风险等级划分规则.docx",
+          "section": "2.风险等级划分：统一的“五级”标准",
+          "doc_date": "2026-07-27",
+          "authority": "authoritative",
+          "text": "2.风险等级划分：统一的“五级”标准\n| 维度 | 等级划分(由低到高) |\n| --- | --- |\n| 投资者风险等级 | C1 (保守型) → C2 (稳健型) → C3 (平衡型) → C4 (积极型) → C5 (激进型) |\n| 产品风险等级 | R1 (低风险) → R2 (中低风险) → R3 (中风险) → R4 (中高风险) → R5 (高风险) |",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.032266458495966696
+        },
+        {
+          "chunk_id": "0dc0926c6877382176d9e033",
+          "source": "fund-platform/README.md",
+          "source_name": "README.md",
+          "section": "工行杯 · 指数基金智能配置决策平台 / Week 2 路线图（7/27 起）",
+          "doc_date": "2026-11-07",
+          "authority": "authoritative",
+          "text": "## Week 2 路线图（7/27 起）\n| 任务 | 负责人 | 说明 |\n|------|--------|------|\n| LGB + 动态评分融合优化 | A | 换手率降低、Black-Litterman 替代纯 MVO |\n| PPO 奖励函数调优 + 特征筛选接入 | zt | 当前 182 维噪声大，用筛选后的 37 维重训 |\n| 客户画像问卷 + 风险档匹配 | C | 设计问卷 → 自动化匹配算法 |\n| ETF 费率 + 资金流 + 行业权重 | C | 回测成本参数精确化 |\n| Streamlit 平台搭建（可选） | zt | 如 PPO 来不及，优先静态图表进 PPT |  \n---",
+          "styles": [],
+          "numbering": [],
+          "score": 0.030117753623188408
+        },
+        {
+          "chunk_id": "8adba0721c0fa596d6b583a6",
+          "source": "fund-platform/docs/用户画像测评问卷+打分规则.docx",
+          "source_name": "用户画像测评问卷+打分规则.docx",
+          "section": "三、测评管理规则",
+          "doc_date": "2026-07-27",
+          "authority": "authoritative",
+          "text": "三、测评管理规则",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.030090497737556562
+        },
+        {
+          "chunk_id": "4eb89e65743b6e145b040c54",
+          "source": "fund-platform/README.md",
+          "source_name": "README.md",
+          "section": "工行杯 · 指数基金智能配置决策平台 / 本周任务分配（7/24-7/26）",
+          "doc_date": "2026-11-07",
+          "authority": "authoritative",
+          "text": "## 本周任务分配（7/24-7/26）\n| 日期 | C（xf，白天） | A（lx，19-22） | B（zt，19-22） |\n|------|-------------|---------------|---------------|\n| 7/24 | 客户画像问卷 + ETF 费率文档 | BL 测试 + 权重敏感性 + 评分交叉验证 ✅ | PPO 调参优化 |\n| 7/25 | 基线策略金融分析文档 | 待定 | PPO 结果分析 / 放弃 PPO 转向 LGB |\n| 7/26 | 汇总本周产出，准备周日导师会 | 整理三线实验对比 | 同步模型进展 |  \n---",
+          "styles": [],
+          "numbering": [],
+          "score": 0.027912386121341344
+        }
+      ],
+      "backends": [
+        "hybrid"
+      ],
+      "llm_events": [
+        {
+          "stage": "router",
+          "status": "success"
+        },
+        {
+          "stage": "compose",
+          "status": "success"
+        }
+      ],
+      "fails": [],
+      "latency_s": 5.78
+    },
+    {
+      "id": "Q11",
+      "question": "手册中的2019切割点严格重跑有什么结论？LGB夏普和动态评分有何影响？",
+      "answer": "2019切割点严格重跑显示：LGB夏普从0.59降至0.42，优势部分依赖前视，但夏普仍为正；动态评分不受影响。不构成投资建议。\n[source: results/backtest/all_strategy_metrics.csv]\n[来源: 项目彻底理解手册-答辩备战版.md §项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 三、LGB 板块（★ 你主答辩，重点吃透）]",
+      "source": "项目彻底理解手册-答辩备战版.md",
+      "source_quote": "**⚠️ 主动披露（必讲）**：筛选切割点晚于回测起点 → **2021–2022 段\"被筛选见过\"**。我们做了 **2019 年切割点的严格重跑**：**LGB 夏普 0.59 → 0.42**（优势部分依赖前视），**动态评分不受影响**。",
+      "golden_answer": "### 3.9 防前视（老师最关心）+ 主动披露  \n**四层防线**：① 宏观按发布日滞后 30 交易日；② 特征筛选规则只用切割日（2022-12-31）前的数据；③ Walk-Forward 严格时序（预测年只用之前数据）；④ 仅前向填充。\n**⚠️ 主动披露（必讲）**：筛选切割点晚于回测起点 → **2021–2022 段\"被筛选见过\"**。我们做了 **2019 年切割点的严格重跑**：**LGB 夏普 0.59 → 0.42**（优势部分依赖前视），**动态评分不受影响**。\n**话术**：\"规则路线稳健；ML 路线我们把真实影响如实报告——**这是方法论诚实，不是缺陷掩盖**。\"",
+      "caveat": null,
+      "recall_at_5": true,
+      "citation_valid": true,
+      "expected_source_cited": true,
+      "keyword_hits": 3,
+      "keyword_total": 3,
+      "verified": true,
+      "tool_calls": [
+        {
+          "name": "search_docs",
+          "args": {
+            "query": "2019切割点严格重跑 结论 LGB夏普 动态评分影响",
+            "top_k": 8
+          },
+          "ok": true
+        },
+        {
+          "name": "get_strategy_metrics",
+          "args": {
+            "strategy": "LGB"
+          },
+          "ok": true
+        }
+      ],
+      "retrieved": [
+        {
+          "chunk_id": "bbf3de2830aa44c601e684d3",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 三、LGB 板块（★ 你主答辩，重点吃透） / 3.9 防前视（老师最关心）+ 主动披露",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "### 3.9 防前视（老师最关心）+ 主动披露  \n**四层防线**：① 宏观按发布日滞后 30 交易日；② 特征筛选规则只用切割日（2022-12-31）前的数据；③ Walk-Forward 严格时序（预测年只用之前数据）；④ 仅前向填充。\n**⚠️ 主动披露（必讲）**：筛选切割点晚于回测起点 → **2021–2022 段\"被筛选见过\"**。我们做了 **2019 年切割点的严格重跑**：**LGB 夏普 0.59 → 0.42**（优势部分依赖前视），**动态评分不受影响**。\n**话术**：\"规则路线稳健；ML 路线我们把真实影响如实报告——**这是方法论诚实，不是缺陷掩盖**。\"",
+          "styles": [],
+          "numbering": [],
+          "score": 0.032266458495966696
+        },
+        {
+          "chunk_id": "6033f76f2e829825766b21e0",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 十、评审五维 × 答辩方案（2026-09-24 增补） / 10.2 黑箱性 —— 两条防线的标准答法（本场重点）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "### 10.2 黑箱性 —— 两条防线的标准答法（本场重点）  \n**问题形态**：\"ML/RL 是黑箱，凭什么信？\"  \n**LGB 侧（lx 主答：三层拆解 + 两个证据 + 一句兜底）**：\n1. **结构上不是黑箱**：LGB 只做\"给 7 只 ETF 排序\"的选券；**最终权重 = 规则仓位 × Softmax(预测)**——任何一天的持仓都能拆成\"评分给了什么状态 + LGB 给谁打高分\"（§3.5 话术）。\n2. **证据一（互相印证）**：特征重要性第一名是 **10Y-2Y 期限利差 0.196**，恰是评分系统宏观维度的核心指标——规则层与 ML 层在数据上互证；Top5 里估值/波动/动量齐备，符合投资常识。\n3. **证据二（主动选择简单）**：弱信号（IC≈0.06）下我们做了 BL/动量/63 日窗口等对照，**复杂方案全部更差**，主动选择最简单的 Softmax；并**主动披露**筛选前视问题（2019 切割重跑：LGB 夏普 0.59→0.42，规则路线不受影响）。\n4. **兜底句**：\"LGB 的每一分权重都能回答'为什么'——仓位看状态、选券看排序；它没有也无法绕过规则层。\"  \n**SASF 侧（zt 主答）**：硬切换规则天然可解释（下行/极寒→动态评分，其余→PPO），触发状态来自四维评分；-26.56% 的回撤可归因到\"切规则\"的触发点。详见 zt《SASF 答辩护稿》第六/七/八节。\n⚠️ **口径提醒**：PPO 的观测维度/特征数在不同版本间演进（旧平台 83 维 → 现行 **48 特征 / 94 维观测**，平台 `infer` 元数据实测）。**答辩时 PPO 细节以 zt 最新备稿为准，LGB 与回测数字以本手册 §三/§五为准**；上台前两人交叉核对（见 10.6）。",
+          "styles": [],
+          "numbering": [],
+          "score": 0.031024531024531024
+        },
+        {
+          "chunk_id": "9b8f1c5baf3af85c6bd8e37b",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 三、LGB 板块（★ 你主答辩，重点吃透） / 3.6 最终结果（背熟，含逐指标解读）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "### 3.6 最终结果（背熟，含逐指标解读）\n| 指标 | LGB 融合 | 动态评分（对比） | 差异 | 一句话解读 |\n|---|---|---|---|---|\n| 年化收益 | **11.99%** | 13.13% | -1.14pp | 少赚 1.14 个点 |\n| 年化波动 | **14.68%** | 19.46% | **-4.78pp** | 波动降了近 1/4 |\n| 夏普比率 | **0.646（全场最高）** | 0.547 | **+0.10** | 风险调整后最优 |\n| 最大回撤 | **-15.02%** | -14.27% | -0.75pp | 与全场最小基本持平 |\n| 卡玛 | 0.798 | **0.920** | -0.12 | 动态评分的收益效率略高 |\n| 月均换手 | **13.7%** | 22.2% | **-8.5pp** | 交易摩擦显著更小 |  \n**一句话**：\"用 1.14pp 的年化，换 0.10 的夏普、4.8pp 的波动和 8.5pp 的换手——**风险调整后更优，且更适合零售客户的持有体验**。\"",
+          "styles": [],
+          "numbering": [],
+          "score": 0.029116045245077504
+        },
+        {
+          "chunk_id": "2868a9931025f8f65e06c53d",
+          "source": "fund-platform/README.md",
+          "source_name": "README.md",
+          "section": "工行杯 · 指数基金智能配置决策平台 / 项目进度 (Week 1) / PPO 实验结论（关键，7/27 更新）",
+          "doc_date": "2026-11-07",
+          "authority": "authoritative",
+          "text": "### PPO 实验结论（关键，7/27 更新）  \nPPO Walk-Forward（逐段训练）过拟合严重——外样本年化 0.15%（夏普 0.008）。\n全局训练（统一回测框架口径）：年化 14.36%、夏普 0.473、回撤 -36.32%。\n**最终方案 SASF 硬切换**（下行/极寒 → 动态评分，其余 → PPO）：年化 **16.52%**、夏普 **0.601**、回撤 **-26.56%**。\n结论：RL 必须全局训练才有效；单独使用不适合零售客户（熊市无主动风控），通过状态自适应融合落地。\n（早期 26.9%/1.41 为独立环境评估，已由诊断否定，不再引用。）",
+          "styles": [],
+          "numbering": [],
+          "score": 0.028991596638655463
+        },
+        {
+          "chunk_id": "590ec0cc590e872d67ff9256",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 三、LGB 板块（★ 你主答辩，重点吃透） / 3.10 LGB 高频追问 Q&A（10 题）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "7. **2025 年 IC 为负为什么还能赚钱？** 该年仓位层主导（震荡/下行态中枢低），选券层边际影响有限——**三层架构的稳健性体现**。\n8. **LGB 是不是过拟合了？** 反向证据两条：① 强正则化参数 + 21 日标签减小过拟合空间；② 2019 切割重跑表明，剥离前视后夏普从 0.59 降到 0.42 但**仍为正**（不是靠偷看未来才有效）。\n9. **和公募量化的差距？** 诚实答：我们只做 7 只宽基/行业 ETF 的配置（不做个股、不做高频），优势是**可解释、低换手、可落地到银行渠道**。\n10. **这套东西怎么真正用起来？** 三档缩放（C2/C3/C4）+ 调仓推送（APP/短信/微信/工作台）+ 平台现场可执行推理（\"历史日期多策略推理\"里选 LGB 融合即出权重）。",
+          "styles": [],
+          "numbering": [],
+          "score": 0.02878726010616578
+        }
+      ],
+      "backends": [
+        "hybrid"
+      ],
+      "llm_events": [
+        {
+          "stage": "router",
+          "status": "success"
+        },
+        {
+          "stage": "compose",
+          "status": "success"
+        }
+      ],
+      "fails": [],
+      "latency_s": 9.47
+    },
+    {
+      "id": "Q12",
+      "question": "为什么LGB预测从2022开始？手册如何说明各年缺失率和整行剔除？",
+      "answer": "LGB 预测自 2022 年开始：手册称特征表 2015–2019 年缺失率为 26%–49%，2020 年降至 8%，2021 年起为 0%；官方实现对含缺失行整行剔除，早期样本因此被剔除。  \n  \n不提供个性化投资建议。实际数据以数据工具为准。不构成投资建议。\n[来源: 项目彻底理解手册-答辩备战版.md §项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 三、LGB 板块（★ 你主答辩，重点吃透）]",
+      "source": "项目彻底理解手册-答辩备战版.md",
+      "source_quote": "**缺失结构（我实测，用于解释\"为什么预测从 2022 开始\"）**：特征表按年缺失率 2015–2019 为 **26%–49%**（未上市资产的价格/估值特征缺失），**2020 年降到 8%、2021 年起为 0%**。官方实现对含缺失的行做**整行剔除**。",
+      "golden_answer": "→ **讲法**：\"最重要的因子是期限利差（0.196），恰好是我们评分系统宏观维度的核心指标——**规则层和 ML 层在数据上互相印证**。\"  \n**缺失结构（我实测，用于解释\"为什么预测从 2022 开始\"）**：特征表按年缺失率 2015–2019 为 **26%–49%**（未上市资产的价格/估值特征缺失），**2020 年降到 8%、2021 年起为 0%**。官方实现对含缺失的行做**整行剔除**。",
+      "caveat": null,
+      "recall_at_5": true,
+      "citation_valid": true,
+      "expected_source_cited": true,
+      "keyword_hits": 2,
+      "keyword_total": 2,
+      "verified": true,
+      "tool_calls": [
+        {
+          "name": "search_docs",
+          "args": {
+            "query": "为什么LGB预测从2022年开始 各年缺失率 整行剔除规则",
+            "top_k": 10
+          },
+          "ok": true
+        },
+        {
+          "name": "search_docs",
+          "args": {
+            "query": "LGB训练样本起始年份2022 特征缺失率整行剔除 手册说明",
+            "top_k": 10
+          },
+          "ok": true
+        }
+      ],
+      "retrieved": [
+        {
+          "chunk_id": "b5a79b43bf82103c48bacb03",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 三、LGB 板块（★ 你主答辩，重点吃透） / 3.2 数据与特征（四层筛选 + 两套特征集）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "→ **讲法**：\"最重要的因子是期限利差（0.196），恰好是我们评分系统宏观维度的核心指标——**规则层和 ML 层在数据上互相印证**。\"  \n**缺失结构（我实测，用于解释\"为什么预测从 2022 开始\"）**：特征表按年缺失率 2015–2019 为 **26%–49%**（未上市资产的价格/估值特征缺失），**2020 年降到 8%、2021 年起为 0%**。官方实现对含缺失的行做**整行剔除**。",
+          "styles": [],
+          "numbering": [],
+          "score": 0.03278688524590164
+        },
+        {
+          "chunk_id": "31c30556af29baac7b98876e",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 三、LGB 板块（★ 你主答辩，重点吃透） / 3.10 LGB 高频追问 Q&A（10 题）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "### 3.10 LGB 高频追问 Q&A（10 题）  \n1. **为什么 7 个模型而不是 1 个？** 各 ETF 收益驱动不同（黄金看实际利率、芯片看景气周期），独立建模避免互相污染；每只 ETF 单独处理缺失与上市时点。\n2. **21 日窗口怎么定的？** 与月度调仓匹配。实测 63 日窗口 IC 更高（0.08）但融合更差（11.7%）——**预测准确 ≠ 衔接效率**。\n3. **Softmax 温度 0.5 是什么意思？** 温度越低权重越集中；0.5 是扫描后的平衡点，防止单票重注（配合单资产上限 30%）。\n4. **为什么不用神经网络 / 更强的模型？** 样本 2798 天 + 弱信号（IC≈0.06）：复杂模型方差更大、更易过拟合。我们做过 BL/动量/63 日对比，复杂方案都更差——**简单方法与信号强度匹配**。\n5. **为什么选 LightGBM 而不是 XGBoost / 线性模型？** 树模型对非线性与特征交互友好，LightGBM 训练快、内存省、对缺失值天然鲁棒；线性模型在弱信号下更稳但表达力不足（我们也用\"排名法\"做过对照）。\n6. **LGB 预测失效怎么办？** 极端情况（未上市/特征缺失）退化为等权；**仓位层永远由规则兜底**——融合架构的意义就是把 ML 风险限制在选券层。\n7. **2025 年 IC 为负为什么还能赚钱？** 该年仓位层主导（震荡/下行态中枢低），选券层边际影响有限——**三层架构的稳健性体现**。",
+          "styles": [],
+          "numbering": [],
+          "score": 0.026988636363636364
+        },
+        {
+          "chunk_id": "590ec0cc590e872d67ff9256",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 三、LGB 板块（★ 你主答辩，重点吃透） / 3.10 LGB 高频追问 Q&A（10 题）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "7. **2025 年 IC 为负为什么还能赚钱？** 该年仓位层主导（震荡/下行态中枢低），选券层边际影响有限——**三层架构的稳健性体现**。\n8. **LGB 是不是过拟合了？** 反向证据两条：① 强正则化参数 + 21 日标签减小过拟合空间；② 2019 切割重跑表明，剥离前视后夏普从 0.59 降到 0.42 但**仍为正**（不是靠偷看未来才有效）。\n9. **和公募量化的差距？** 诚实答：我们只做 7 只宽基/行业 ETF 的配置（不做个股、不做高频），优势是**可解释、低换手、可落地到银行渠道**。\n10. **这套东西怎么真正用起来？** 三档缩放（C2/C3/C4）+ 调仓推送（APP/短信/微信/工作台）+ 平台现场可执行推理（\"历史日期多策略推理\"里选 LGB 融合即出权重）。",
+          "styles": [],
+          "numbering": [],
+          "score": 0.02964426877470356
+        },
+        {
+          "chunk_id": "cbb60ab82ab2ce10b044353b",
+          "source": "fund-platform/README.md",
+          "source_name": "README.md",
+          "section": "工行杯 · 指数基金智能配置决策平台 / 项目进度 (Week 1) / 回撤修复天数（零售客户最直观的风险指标）",
+          "doc_date": "2026-11-07",
+          "authority": "authoritative",
+          "text": "### 回撤修复天数（零售客户最直观的风险指标）\n| 危机 | 策略 | 回撤深度 | 修复天数 | 客户语言 |\n|------|------|---------|---------|---------|\n| 2015 股灾 | 等权 | -35.4% | 1440 天(4 年) | \"扛 4 年才回本\" |\n| | 动态评分 | **-13.6%** | **239 天** | \"不到1年回本\" |\n| | LGB 融合 | -14.4% | **231 天** | \"不到1年回本\" |\n| 2018 熊市 | 等权 | -18.7% | 435 天 | |\n| | 动态评分 | **-11.0%** | 123 天 | |\n| | LGB 融合 | -12.9% | 140 天 | |\n| 2021 后震荡 | 等权 | **-38.0%** | 597 天 | \"最深跌近四成\" |\n| | 动态评分 | **-13.6%** | 888 天 | \"跌少但恢复慢\" |\n| | LGB 融合 | **-13.0%** | **342 天** | \"回撤最浅、修复较快\" |  \n> 口径：统一回测框架（daily 评分）；修复天数 = 危机内低点 → 净值回到危机前高点（日历日）。动态评分 / LGB 三次危机回撤均不超 14%。",
+          "styles": [],
+          "numbering": [],
+          "score": 0.029386529386529386
+        },
+        {
+          "chunk_id": "f8f0f8b7e0767ad0c5016f5f",
+          "source": "项目书修订说明.md",
+          "source_name": "项目书修订说明.md",
+          "section": "项目书修订说明与复查清单（2026-09-19 · v6 定稿） / 四、附：修订前的现状审计与依据（2026-09-17 早） / 附-2 LGB 定案（实测对决与结论）",
+          "doc_date": "2026-09-24",
+          "authority": "historical",
+          "text": "### 附-2 LGB 定案（实测对决与结论）  \n**背景**：书里的 LGB 行（11.23%/0.584）来自未推送的本机运行，仓库**任何**实现都跑不出；我们用仓库数据做了同框架对决（同一回测脚本、同一数据、只换预测文件）：\n| 版本 | 年化 | 夏普 | 最大回撤 | 卡玛 | 换手 |\n|---|---|---|---|---|---|\n| **官方预测**（仓库现行 `results/pred_return_lgb_daily.csv`，37 维、2022 起，时序 IC 0.0445） | **11.99%** | **0.6462** | -15.02% | 0.798 | 13.7% |\n| 修复版预测（2018 起、44 维含上市标记，横截面 IC 均值 -0.0394） | 11.80% | 0.6027 | -15.03% | 0.785 | 16.7% |\n| 修复版·截取共同窗口 2022+ | 10.24% | 0.5139 | -15.31% | 0.669 | 13.9% |\n| 书里目前写的 | 11.23% | 0.584 | -16.36% | 0.686 | 16.0% |  ",
+          "styles": [],
+          "numbering": [],
+          "score": 0.028850145288501453
+        }
+      ],
+      "backends": [
+        "hybrid"
+      ],
+      "llm_events": [
+        {
+          "stage": "router",
+          "status": "success"
+        },
+        {
+          "stage": "compose",
+          "status": "success"
+        }
+      ],
+      "fails": [],
+      "latency_s": 9.69
+    },
+    {
+      "id": "Q13",
+      "question": "手册要求北向资金停更时如何处理缺失数据与情绪评分？是否填0？",
+      "answer": "手册要求：北向资金2024-08-19后停披露时置 **NaN**，情绪评分给 **中性分**；**绝不用 0 填充**（0 是错误信息，会污染情绪维度）。因此不是填 0。实际数据口径以数据工具为准。\n\n\n\n不构成个性化投资建议。实际数据以数据工具为准。不构成投资建议。\n[source: data/clean/train_total_feature.csv]\n[来源: 项目彻底理解手册-答辩备战版.md §项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 一、资产池与数据链（被问先讲这层）]",
+      "source": "项目彻底理解手册-答辩备战版.md",
+      "source_quote": "**① 北向资金 2024-08-19 后停披露** → 置 **NaN**，评分时给中性分；**绝不用 0 填充**（0 是错误信息，会污染情绪维度）。",
+      "golden_answer": "### 1.5 两个真实数据问题（老师揪过，答辩必讲）  \n**① 北向资金 2024-08-19 后停披露** → 置 **NaN**，评分时给中性分；**绝不用 0 填充**（0 是错误信息，会污染情绪维度）。\n话术：\"**缺失是真实的，伪造是错误**——我们宁可让模型知道'这里没数据'。\"\n**② 月度宏观的前视风险**（PMI/CPI/M2 都是次月才发布）→ 全部**滞后 30 个交易日**使用。\n话术：\"3 月 CPI 要 4 月才公布，我们不会在 3 月 15 日就'知道'它。\"修正前后**策略排名与结论保持不变**（稳健性证据）。",
+      "caveat": "手册原则不填0；实际文件存在填0记录，实际数值以get_data_caveats为准。",
+      "recall_at_5": true,
+      "citation_valid": true,
+      "expected_source_cited": true,
+      "keyword_hits": 3,
+      "keyword_total": 3,
+      "verified": true,
+      "tool_calls": [
+        {
+          "name": "search_docs",
+          "args": {
+            "query": "北向资金停更 缺失数据如何处理 是否填0 情绪评分",
+            "top_k": 8
+          },
+          "ok": true
+        },
+        {
+          "name": "get_data_caveats",
+          "args": {},
+          "ok": true
+        }
+      ],
+      "retrieved": [
+        {
+          "chunk_id": "9c311c0fda250cb94226d3d8",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 一、资产池与数据链（被问先讲这层） / 1.5 两个真实数据问题（老师揪过，答辩必讲）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "### 1.5 两个真实数据问题（老师揪过，答辩必讲）  \n**① 北向资金 2024-08-19 后停披露** → 置 **NaN**，评分时给中性分；**绝不用 0 填充**（0 是错误信息，会污染情绪维度）。\n话术：\"**缺失是真实的，伪造是错误**——我们宁可让模型知道'这里没数据'。\"\n**② 月度宏观的前视风险**（PMI/CPI/M2 都是次月才发布）→ 全部**滞后 30 个交易日**使用。\n话术：\"3 月 CPI 要 4 月才公布，我们不会在 3 月 15 日就'知道'它。\"修正前后**策略排名与结论保持不变**（稳健性证据）。",
+          "styles": [],
+          "numbering": [],
+          "score": 0.03278688524590164
+        },
+        {
+          "chunk_id": "81934e88be868b45072ec4af",
+          "source": "fund-platform/docs/评分系统金融规则.docx",
+          "source_name": "评分系统金融规则.docx",
+          "section": "二、维度打分函数 / 维度三：情绪（20%）",
+          "doc_date": "2026-07-23",
+          "authority": "authoritative",
+          "text": "维度三：情绪（20%）\n数据支撑：两融余额反映杠杆资金情绪，北向资金是外资风向标。情绪指标在资产配置模型中通常占15-25%权重。\n函数：\ndef calc_sent_score(margin_change, north_flow):\n\"\"\"\nmargin_change: 两融余额月度变化率（%）\nnorth_flow: 北向资金当月累计净流入（亿元）\n输出: 0-20分\n\"\"\"\n# 两融部分（满分10分）：变化率越大越乐观\nif margin_change >= 5.0:\nmargin_score = 10.0\nelif margin_change <= -5.0:\nmargin_score = 0.0\nelse:\nmargin_score = 10.0 * (margin_change + 5.0) / 10.0\n# 北向部分（满分10分）：净流入越多越好\nif north_flow >= 500:\nnorth_score = 10.0\nelif north_flow <= -500:\nnorth_score = 0.0\nelse:\nnorth_score = 10.0 * (north_flow + 500) / 1000.0\nreturn margin_score + north_score\n依据：\n1.两融阈值±5%：参考两融余额月度波动的历史分位数\n2.北向阈值±500亿：参考北向资金月度净流入的历史均值波动范围",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [
+            "<w:numPr xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" xmlns:wpc=\"http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:wp14=\"http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing\" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" xmlns:w10=\"urn:schemas-microsoft-com:office:word\" xmlns:w15=\"http://schemas.microsoft.com/office/word/2012/wordml\" xmlns:wpg=\"http://schemas.microsoft.com/office/word/2010/wordprocessingGroup\" xmlns:wpi=\"http://schemas.microsoft.com/office/word/2010/wordprocessingInk\" xmlns:wne=\"http://schemas.microsoft.com/office/word/2006/wordml\" xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\" xmlns:wpsCustomData=\"http://www.wps.cn/officeDocument/2013/wpsCustomData\">\n  <w:ilvl w:val=\"0\"/>\n  <w:numId w:val=\"1\"/>\n</w:numPr>\n"
+          ],
+          "score": 0.03225806451612903
+        },
+        {
+          "chunk_id": "07efcb472e7ff52f6f88630b",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 一、资产池与数据链（被问先讲这层） / 1.7 本节高频追问 Q&A",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "### 1.7 本节高频追问 Q&A  \n1. **为什么是这 7 只？** 核心-卫星 + 四类资产低相关（黄金≈0、国债多数负相关），且 ETF 透明低成本、适配银行渠道。\n2. **数据有多长？** 清洗后**回测与演示区间 2015-01~2026-07，2798 个交易日（11.5 年）**；原始采集窗口更早（约 2010 起），但 2015 前可用资产不足，不进回测。\n3. **未上市资产怎么处理？** 掩码置零 + 特征置空，**不伪造**；因此 2015 年只有 4 只可配。\n4. **估值分位怎么算的？** 沪深300 PE **5 年滚动分位**，point-in-time（只用当日及以前数据），避免前视。\n5. **北向停了怎么办？** 置 NaN + 评分给中性分；不填 0。\n6. **怎么证明数据没被动过手脚？** 原始文件留档可审计 + 脚本可复现 + 估值与官网一致 + 日历 100% 对齐。",
+          "styles": [],
+          "numbering": [],
+          "score": 0.031746031746031744
+        },
+        {
+          "chunk_id": "dd88a6a03cec73236babc884",
+          "source": "fund-platform/docs/评分系统金融规则.docx",
+          "source_name": "评分系统金融规则.docx",
+          "section": "一、填入数据要求",
+          "doc_date": "2026-07-23",
+          "authority": "authoritative",
+          "text": "一、填入数据要求\n| 维度 | 所需数据列 |\n| --- | --- |\n| 估值 | 沪深300PE_TTM、沪深300PE_5年分位、中证500PE_TTM、中证500PE_5年分位 |\n| 宏观 | PMI（月度）、10Y-2Y国债利差（日度） |\n| 情绪 | 两融余额（日度）、北向资金净流入（日度） |\n| 趋势 | 沪深300收盘价、MA20 |",
+          "styles": [
+            "Normal"
+          ],
+          "numbering": [],
+          "score": 0.031009615384615385
+        },
+        {
+          "chunk_id": "f1e7b0ee0d027300a2fbc733",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 三、LGB 板块（★ 你主答辩，重点吃透） / 3.8 \"修复版\"实验：我们用数据做的选择（加分项）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "### 3.8 \"修复版\"实验：我们用数据做的选择（加分项）  \n我们试过把 WF 起点提前到 2018（对缺失特征做**分类填充** + 加 **7 个上市标记**，44 维），做了三方对决（同一回测框架、只换预测文件）：\n| 版本 | 年化 | 夏普 | 回撤 |\n|---|---|---|---|\n| **官方版（采用）** 37 维、2022 起 | **11.99%** | **0.6462** | -15.02% |\n| 修复版 全段（2018 起） | 11.80% | 0.6027 | -15.03% |\n| 修复版 截共同窗口（2022+） | 10.24% | **0.5139** | -15.31% |  \n**根因**：修复版的**横截面 IC 转负（-0.039）**——填充\"补出来\"的早期样本引入了噪声；而官方版的整行剔除虽然损失了早期年份，却保证了每一行训练数据都是**真实完整观测**。\n**结论**：\"我们试过更复杂的改法，用同一把尺子量过，**官方版在共同窗口显著更优（0.6462 vs 0.5139）**，所以保持官方版\"——主动讲这个，体现**用数据决策**而不是堆技术。",
+          "styles": [],
+          "numbering": [],
+          "score": 0.029709507042253523
+        }
+      ],
+      "backends": [
+        "hybrid"
+      ],
+      "llm_events": [
+        {
+          "stage": "router",
+          "status": "success"
+        },
+        {
+          "stage": "compose",
+          "status": "success"
+        }
+      ],
+      "fails": [],
+      "latency_s": 10.84
+    },
+    {
+      "id": "Q14",
+      "question": "强化学习设计文档中，PPO状态空间包含哪三类信息？",
+      "answer": "据强化学习背景文档，PPO 状态空间（环境状态观测）包含三类：①经降噪、去共线性的有效市场特征；②上一轮资产持仓权重；③当前组合累计净值。分别对应外部环境、自身仓位、自身绩效。\n\n引用：\n\n实际数据口径以数据工具为准。不构成投资建议。\n[来源: 强化学习.txt §二、各模块详细逻辑链条（逐块拆解） / 2. 自定义强化学习交易环境模块（项目核心创新、完整闭环逻辑）]",
+      "source": "fund-platform/docs/强化学习.txt",
+      "source_quote": "- 完整状态空间构建：突破传统仅输入市场特征的局限，状态信息包含「精炼市场特征 + 当前资产持仓权重 + 组合实时净值」，让智能体同时感知外部市场行情与自身持仓状态，决策更贴合实盘逻辑。",
+      "golden_answer": "2.2 环境核心优势总结\n- 状态空间完整：融合外部市场与内部持仓绩效，决策逻辑更贴合机构实盘配置。\n- 交易规则合规：权重归一化约束，完全符合大类资产配置业务逻辑。\n- 奖励机制金融化：将传统量化风控指标内嵌至训练梯度，让AI训练不再是黑盒拟合，而是遵循金融风控逻辑的可解释优化。\n关键优势：所有风险指标均采用历史时序数据（不含当日未来信息）计算，全程无数据泄露，训练逻辑严谨合规。\n本模块为整个项目的核心规则载体，所有模型的训练逻辑、交易约束、奖惩规则均在此定义，区别于通用开源RL环境，是适配金融资产配置的定制化环境。\n环境核心逻辑分为三部分：\n- 完整状态空间构建：突破传统仅输入市场特征的局限，状态信息包含「精炼市场特征 + 当前资产持仓权重 + 组合实时净值」，让智能体同时感知外部市场行情与自身持仓状态，决策更贴合实盘逻辑。\n- 合法交易动作约束：通过Softmax函数将模型输出动作归一化为合法资产权重，保证所有权重非负、总和为1，严格匹配满仓资产配置的真实交易规则。\n- 多维风控奖惩函数（核心创新）：摒弃单一收益奖励逻辑，构建兼顾收益与风险的平衡奖励体系：\n        \n1. 正向激励：基于当日组合收益给予正向奖励，鼓励模型累积超额收益；\n        \n2. 波动惩罚：基于历史滚动波动率惩罚高震荡行情的激进持仓，抑制策略波动；\n        \n3. 回撤惩罚：基于历史滚动回撤进行风险惩罚，杜绝模型深度被套、持续亏损；\n        \n4. 换手惩罚：对频繁调仓、大幅权重变动进行轻量化惩罚，降低无效交易成本，提升策略实盘可行性。",
+      "caveat": null,
+      "recall_at_5": false,
+      "citation_valid": true,
+      "expected_source_cited": true,
+      "keyword_hits": 3,
+      "keyword_total": 3,
+      "verified": true,
+      "tool_calls": [
+        {
+          "name": "search_docs",
+          "args": {
+            "query": "强化学习设计文档 PPO 状态空间 包含哪三类信息",
+            "top_k": 5
+          },
+          "ok": true
+        }
+      ],
+      "retrieved": [
+        {
+          "chunk_id": "df5771bb946f8496a22c2e51",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 〇、一页速览（先背这页）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "## 〇、一页速览（先背这页）  \n**赛题**：不同市场环境下的指数型基金动态配置策略设计。**作品**：异质市场环境下指数基金动态配置优化策略研究。\n**一句话逻辑**：市场评分系统识别环境（五态）→ 规则层定权益仓位中枢 → 学习方法（LGB 监督 / PPO 强化）在权益内部做增量选择 → 统一回测框架验证 → 三档客户方案 + Streamlit 平台落地。  \n**三条技术路线与最终定位**：\n| 路线 | 代表策略 | 年化 | 夏普 | 回撤 | 定位 |\n|---|---|---|---|---|---|\n| 规则 | 动态评分 | 13.13% | 0.547 | -14.27% | 全场**回撤最小**，卡玛 0.920 最高 |\n| 监督学习 | **LGB 融合**（你主答辩） | 11.99% | **0.646** | -15.02% | 全场**夏普最高**、低波动低换手 |\n| 强化学习 | PPO 月度 → **SASF 硬切换** | 14.36% → **16.52%** | 0.473 → **0.601** | -36.32% → -26.56% | RL 最优落地形式（牛市/震荡用 PPO） |  \n**分工**：数据+特征+LGB+回测+平台 = lx（你）；PPO/强化学习 = zt；评分规则+项目书+服务方案 = xf。  \n---",
+          "styles": [],
+          "numbering": [],
+          "score": 0.03125763125763126
+        },
+        {
+          "chunk_id": "3244c99251565d9d19f32356",
+          "source": "fund-platform/docs/强化学习.txt",
+          "source_name": "强化学习.txt",
+          "section": "二、各模块详细逻辑链条（逐块拆解） / 4.1 为什么同时选用 PPO、A2C、DDPG 三个模型？",
+          "doc_date": "2026-07-19",
+          "authority": "background",
+          "text": "4.1 为什么同时选用 PPO、A2C、DDPG 三个模型？\n本研究并非单一模型试错，而是采用控制变量消融实验，选取三类金融量化领域最主流、最具代表性的强化学习算法，覆盖「随机策略、单步策略、确定性策略」三大流派，保证实验结论具备普适性与说服力：\n- A2C（异步优势演员-评论家）：代表基础随机策略梯度算法，是PPO的前身，结构轻量、训练速度快，作为基础对照模型，用于验证“约束优化”的必要性。\n- DDPG（深度确定性策略梯度）：代表确定性连续动作算法，适合连续控制任务，常用于传统资产配置研究，用于对比“随机探索”与“确定性输出”在金融时序中的优劣。\n- PPO（近端策略优化）：当前金融强化学习工业级最优 baseline，融合前两者优点，是本项目最终落地模型。\n三模型对比可以完整证明：并非所有RL算法都适配资产配置任务，只有PPO具备金融场景稳定性，避免“随便选一个模型”的实验漏洞。",
+          "styles": [],
+          "numbering": [],
+          "score": 0.031099324975891997
+        },
+        {
+          "chunk_id": "ea8444c374923c005dc2b0bf",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 十、评审五维 × 答辩方案（2026-09-24 增补） / 10.3 创新性 —— \"新在哪\"三条",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "### 10.3 创新性 —— \"新在哪\"三条  \n1. **融合范式**：不赌单一最强模型，而是\"**规则骨架 + 学习方法做增量**\"——监督（LGB）与强化（SASF）两条主线同构，且强度接近（夏普 0.646 / 0.601）；\n2. **状态自适应硬切换**：用可解释规则决定\"何时交给 RL\"（下行果断切规则），比逐日软混合更稳；\n3. **方法论结论**：弱信号 + 中等样本下\"**与信号强度匹配的简单方法更优**\"——由 BL / 动量 / 63 日窗 / 残差 RL / 5-seed 集成等 10+ 组对照实验支撑（也是我们否定早期 26.9% 结果的原因）。",
+          "styles": [],
+          "numbering": [],
+          "score": 0.030621785881252923
+        },
+        {
+          "chunk_id": "b21ffa315c917f4fda5009c9",
+          "source": "fund-platform/docs/强化学习.txt",
+          "source_name": "强化学习.txt",
+          "section": "二、各模块详细逻辑链条（逐块拆解） / 2. 自定义强化学习交易环境模块（项目核心创新、完整闭环逻辑）",
+          "doc_date": "2026-07-19",
+          "authority": "background",
+          "text": "2. 自定义强化学习交易环境模块（项目核心创新、完整闭环逻辑）\n交易环境是整个强化学习系统的唯一规则中枢与交互载体，承担「状态输入、智能体决策、交易执行、收益计算、风险奖惩、状态迭代」全链路逻辑。所有训练收敛效果、风控约束、调仓规则全部由环境定义，是区别于普通开源模型的核心创新点。\n2.1 环境完整闭环逻辑链条（State→Action→Reward→Next State）\n本环境严格遵循Gym标准马尔可夫决策过程（MDP），每一步迭代逻辑完全贴合真实交易日交易流程，无未来信息、无逻辑漏洞：\n- 第一步：状态观测 State（智能体看到的信息）\n打破传统仅输入行情特征的缺陷，智能体每一步可观测完整信息：\n① 经过降噪、去共线性的有效市场特征（外部环境）\n② 上一轮7类资产持仓权重（自身仓位）\n③ 当前组合累计净值（自身绩效）\n作用：让智能体“知行情、知仓位、知盈亏”，决策具备连续性和现实性。\n- 第二步：动作输出 Action（智能体决策）\n模型输出原始动作向量，经由Softmax归一化，输出7维合法资产权重：\n约束：所有权重∈[0,1]、权重总和=1，严格满足满仓配置规则，杜绝做空、杠杆等不合规交易。\n- 第三步：交易执行与收益计算\n根据当日资产收益率与目标持仓权重，计算当日组合收益率，迭代更新组合净值；同时计算新旧权重差值，得到当日换手率，量化交易成本。\n- 第四步：多维奖励/惩罚计算（核心创新）\n环境内置金融风控评价体系，不单一追逐收益，实现风险约束下的收益优化：\n① 正向奖励：根据当日组合收益给予正向激励，引导模型积累超额收益；",
+          "styles": [],
+          "numbering": [],
+          "score": 0.03057889822595705
+        },
+        {
+          "chunk_id": "a44d8696ec5fa3eef88edcb3",
+          "source": "fund-platform/docs/强化学习.txt",
+          "source_name": "强化学习.txt",
+          "section": "正文",
+          "doc_date": "2026-07-19",
+          "authority": "background",
+          "text": "强化学习资产配置模型整体代码逻辑链条文档\n本文档基于项目完整代码架构，系统性梳理数据预处理、特征工程、自定义交易环境、滚动训练框架、多模型消融实验、传统基准对照全流程逻辑，用于团队工作同步、项目流程复盘与实验逻辑说明，内容简洁准确、层级清晰，完全匹配现有可运行代码体系。",
+          "styles": [],
+          "numbering": [],
+          "score": 0.029850746268656716
+        }
+      ],
+      "backends": [
+        "hybrid"
+      ],
+      "llm_events": [
+        {
+          "stage": "router",
+          "status": "success"
+        },
+        {
+          "stage": "compose",
+          "status": "success"
+        }
+      ],
+      "fails": [],
+      "latency_s": 5.72
+    },
+    {
+      "id": "Q15",
+      "question": "强化学习设计文档中，PPO奖励函数的正向奖励和三类惩罚是什么？",
+      "answer": "正向奖励：相对规则基准的超额收益；三类惩罚：波动、回撤、夏普边际。奖励整体截断至 clip(-5,5)。不构成投资建议。\n[来源: 项目彻底理解手册-答辩备战版.md §项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 四、PPO / SASF 板块（zt 主讲，你兜底）]",
+      "source": "fund-platform/docs/强化学习.txt",
+      "source_quote": "④ 换手率惩罚：约束频繁无效调仓，降低交易摩擦成本，贴合实盘。",
+      "golden_answer": "环境内置金融风控评价体系，不单一追逐收益，实现风险约束下的收益优化：\n① 正向奖励：根据当日组合收益给予正向激励，引导模型积累超额收益；\n② 波动率惩罚：基于历史滚动窗口计算波动，惩罚高风险震荡持仓；\n③ 回撤惩罚：基于历史累计收益计算最大回撤，严厉惩罚持续亏损状态；\n④ 换手率惩罚：约束频繁无效调仓，降低交易摩擦成本，贴合实盘。\n- 第五步：状态迭代 Next State\n完成当日交易后，环境自动更新时间索引、持仓权重、净值状态，进入下一交易日，形成完整时序迭代闭环，直至样本结束。",
+      "caveat": null,
+      "recall_at_5": false,
+      "citation_valid": true,
+      "expected_source_cited": false,
+      "keyword_hits": 3,
+      "keyword_total": 4,
+      "verified": true,
+      "tool_calls": [
+        {
+          "name": "search_docs",
+          "args": {
+            "query": "强化学习设计文档 PPO奖励函数 正向奖励 三类惩罚",
+            "top_k": 5
+          },
+          "ok": true
+        }
+      ],
+      "retrieved": [
+        {
+          "chunk_id": "3e51fd34b57838a57655b0f5",
+          "source": "fund-platform/docs/强化学习.txt",
+          "source_name": "强化学习.txt",
+          "section": "二、各模块详细逻辑链条（逐块拆解） / 4.2 为什么最终选用 PPO 算法？（核心答辩理由）",
+          "doc_date": "2026-07-19",
+          "authority": "background",
+          "text": "4.2 为什么最终选用 PPO 算法？（核心答辩理由）\n结合金融市场时序不稳定、噪声大、风格易漂移、风险敏感四大特性，PPO具备另外两个模型不具备的绝对优势：\n- 解决A2C训练不稳定问题：A2C单步更新梯度抖动大，资产权重频繁跳变、策略回撤极高；PPO通过批量更新优势函数，训练平滑、权重稳定。\n- 解决DDPG严重过拟合问题：DDPG输出确定性动作，只会机械拟合历史行情，外样本泛化极差，实盘极易失效；PPO随机策略具备探索能力，适配未知行情。\n- 近端裁剪约束适配金融风控：PPO限制每一轮策略更新幅度，防止单步剧烈调仓、杜绝极端风险，完美贴合资产配置“稳收益、控风险”的核心需求。\n- 适配本项目多维奖励函数：本项目奖励同时包含收益、波动、回撤、换手多维度信号，PPO对复杂奖励曲面拟合能力远优于A2C/DDPG。\n实验结论：PPO在收益能力、回撤控制、训练稳定性、外样本泛化能力上全面优于A2C与DDPG，是本资产配置任务的最优算法选型。\n本模块用于验证最优算法选型，通过控制变量法，仅替换算法模型，固定所有实验条件，对比不同RL算法在资产配置任务中的适配性。\n- PPO算法：具备近端裁剪约束，平衡探索与利用，训练稳定、泛化性强，兼顾收益提升与风险控制，适配金融时序任务。\n- A2C算法：单步更新、梯度方差大，权重切换不稳定，风控能力弱，整体策略稳定性不足。\n- DDPG算法：确定性动作输出，极易拟合训练集噪声，外样本泛化能力差，不适配多变的市场行情。\n实验结论：PPO算法在大类资产配置任务中综合性能最优，为本项目最终选用的核心模型。",
+          "styles": [],
+          "numbering": [],
+          "score": 0.031024531024531024
+        },
+        {
+          "chunk_id": "8b36bd98df1ce1decdebc325",
+          "source": "fund-platform/README.md",
+          "source_name": "README.md",
+          "section": "工行杯 · 指数基金智能配置决策平台 / 关键文档索引",
+          "doc_date": "2026-11-07",
+          "authority": "authoritative",
+          "text": "## 关键文档索引\n| 文档 | 路径 | 用途 |\n|------|------|------|\n| 执行手册 | `docs/农行杯赛题一_保姆级执行手册_最终版.md` | 每周每任务 Step-by-Step |\n| 审计清单 | `docs/数据资产审计与补采清单.md` | 数据资产完整记录 + 问题追踪（v7） |\n| 评分规则 | `docs/评分系统金融规则.docx` | sf 编写的四维打分金融依据 |\n| 赛题原文 | `docs/赛题.txt` | 比赛要求原文 |\n| 方案评估 | `docs/项目方案评估与修改建议.md` | PPO砍掉/LGB聚焦等决策建议 |\n| RL 方案 | `docs/强化学习.txt` | zt 的 PPO 架构设计文档 |\n| 清洗规则 | `data/raw/数据清洗规则.txt` | ffill/禁止bfill/去重等规范 |  \n---",
+          "styles": [],
+          "numbering": [],
+          "score": 0.030330882352941176
+        },
+        {
+          "chunk_id": "df5771bb946f8496a22c2e51",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 〇、一页速览（先背这页）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "## 〇、一页速览（先背这页）  \n**赛题**：不同市场环境下的指数型基金动态配置策略设计。**作品**：异质市场环境下指数基金动态配置优化策略研究。\n**一句话逻辑**：市场评分系统识别环境（五态）→ 规则层定权益仓位中枢 → 学习方法（LGB 监督 / PPO 强化）在权益内部做增量选择 → 统一回测框架验证 → 三档客户方案 + Streamlit 平台落地。  \n**三条技术路线与最终定位**：\n| 路线 | 代表策略 | 年化 | 夏普 | 回撤 | 定位 |\n|---|---|---|---|---|---|\n| 规则 | 动态评分 | 13.13% | 0.547 | -14.27% | 全场**回撤最小**，卡玛 0.920 最高 |\n| 监督学习 | **LGB 融合**（你主答辩） | 11.99% | **0.646** | -15.02% | 全场**夏普最高**、低波动低换手 |\n| 强化学习 | PPO 月度 → **SASF 硬切换** | 14.36% → **16.52%** | 0.473 → **0.601** | -36.32% → -26.56% | RL 最优落地形式（牛市/震荡用 PPO） |  \n**分工**：数据+特征+LGB+回测+平台 = lx（你）；PPO/强化学习 = zt；评分规则+项目书+服务方案 = xf。  \n---",
+          "styles": [],
+          "numbering": [],
+          "score": 0.030309988518943745
+        },
+        {
+          "chunk_id": "bf6ebb1b93c2d8a95bb426c8",
+          "source": "项目彻底理解手册-答辩备战版.md",
+          "source_name": "项目彻底理解手册-答辩备战版.md",
+          "section": "项目彻底理解手册（答辩备战版 · 2026-09-19 终版） / 四、PPO / SASF 板块（zt 主讲，你兜底）",
+          "doc_date": "2026-09-24",
+          "authority": "authoritative",
+          "text": "## 四、PPO / SASF 板块（zt 主讲，你兜底）  \n- **环境（MDP）**：观测 **83 维**（44 特征 + 7 当前权重 + 4 评分 + 14 两期历史收益 + 10 序列特征 + 4 行情 one-hot）；动作 7 维连续向量经 Softmax 映射为权重；约束：权重和=1、单资产 [1%, 25%]、债券硬底仓、未上市权重强制 0（**单纯形投影**而非惩罚）。\n- **奖励**：相对规则基准的超额收益 + 多惩罚项（波动/回撤/夏普边际），clip(-5,5)。\n- **两阶段实验**：① Walk-Forward（500 天窗→60 天外推）**严重过拟合**（外样本年化 0.15%）；② **全局训练**有效但早期基线退化为\"82% 权益等权 + 18% 债券\"（26.9%/1.41 是那次评估，**已被第五章诊断否定，不要再引用**）。\n- **消融与集成**：10 组消融（约束→奖励→动作空间→残差 RL→集成）；baseline test 夏普 0.96 → F 残差 RL 1.75；**5-seed 集成 1.747**（方差下降但偏差仍在）。\n- **SASF 硬切换（最终方案）**：**下行/极寒 → 动态评分；其余状态 → PPO**。全时段 **年化 16.52%、夏普 0.601、回撤 -26.56%**，自研方案进攻端最优（夏普略低于 LGB 0.646，但年化高 4.5pp）。\n- **局限（主动讲）**：状态识别有滞后；\"极寒\"样本极少（样本不足难做显著性检验）。  \n---",
+          "styles": [],
+          "numbering": [],
+          "score": 0.030309988518943745
+        },
+        {
+          "chunk_id": "f68fa3f54f1e2a4cc46119dd",
+          "source": "项目书修订说明.md",
+          "source_name": "项目书修订说明.md",
+          "section": "项目书修订说明与复查清单（2026-09-19 · v6 定稿） / 四、附：修订前的现状审计与依据（2026-09-17 早） / 附-3 修订前：建议改项",
+          "doc_date": "2026-09-24",
+          "authority": "historical",
+          "text": "### 附-3 修订前：建议改项  \n1. **PPO 章节与最终代码的终校（请 zt 确认）**：书里写 α₁=10.0 / α₂=0.5 / α₃=0 / α₄=1.0 / α₅=0.02、单资产 [1%,25%]、观测约 85 维、切分 75/15/10、clip(-5,5)——请对照最终训练脚本（`env_16.py` / `ppo_9.16.py`）逐项确认；若不一致，以代码为准。\n2. **成本口径注明**：书里\"双边换手成本 0.1%\"成立，但两套脚本写法不同（主表引擎 `Σ|Δw|/2 × 0.1%`；SASF 脚本 `Σ|Δw| × 0.05%`），数值等价；建议在回测设定处加一句括号说明，避免老师复算时困惑。\n3. **2019cut 稳健性小节** ✅ 已在（\"以 2022-12-31 为切割点…\"附近），建议再补一句\"主口径保留官方版本，本小节为主动披露的稳健性检验\"。\n4. **上市日期表**：把 7 只 ETF 上市日期表挪到资产池章节，并加一句\"2015 年实际可用 4 只，2017 年 5 只，2020 年后 7 只全可用\"（书里 P14 提过但藏得深）。\n5. **MVO +447%（2015 牛市段）加脚注**：\"未加约束的均值-方差基准，权重极端集中 + 2015 牛市资产暴涨所致；同期波动率约 76%、2021 后归零——用以说明无约束优化的病态行为\"。\n6. **公式排版**：第五章奖励函数公式在 Word 里排版混乱，请用公式编辑器重排。",
+          "styles": [],
+          "numbering": [],
+          "score": 0.03009207275993712
+        }
+      ],
+      "backends": [
+        "hybrid"
+      ],
+      "llm_events": [
+        {
+          "stage": "router",
+          "status": "success"
+        },
+        {
+          "stage": "compose",
+          "status": "success"
+        },
+        {
+          "stage": "compose",
+          "status": "success"
+        }
+      ],
+      "fails": [
+        "缺少关键词 换手"
+      ],
+      "latency_s": 11.64
+    }
+  ]
+}
