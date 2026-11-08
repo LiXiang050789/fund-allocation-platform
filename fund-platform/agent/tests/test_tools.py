@@ -102,3 +102,11 @@ def test_macro_parse_failure(monkeypatch, tmp_path):
         return t._read(str(path), stat.st_mtime_ns, stat.st_size, kwargs.get('encoding', 'utf-8-sig'), kwargs.get('cols'), kwargs.get('header', False)).copy()
     monkeypatch.setattr(t, 'table', read_real)
     assert not t.get_data_caveats()['ok']
+
+
+def test_natural_phase_names():
+    natural = rows(t.get_segment_performance(segment='2021年后震荡期'))
+    canonical = rows(t.get_segment_performance(segment='2021后震荡'))
+    assert natural == canonical
+    assert rows(t.get_drawdown_recovery(crisis='2015年股灾期间')) == rows(t.get_drawdown_recovery(crisis='2015'))
+    assert not t.get_segment_performance(segment='未知阶段')['ok']

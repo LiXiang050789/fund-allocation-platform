@@ -106,3 +106,116 @@ def test_long_tables_repeat_header(tmp_path):
     chunks = chunks_for(path, tmp_path, 'authoritative')
     assert len(chunks) > 1
     assert all(c['text'].startswith('| 项目 | 规则 |\n| --- | --- |') for c in chunks)
+
+
+@pytest.fixture
+def indexed_tool(mini_corpus, monkeypatch):
+    import dataclasses
+    from app.rag import retriever
+    root, corpus, index = mini_corpus
+    build(root, corpus, index, vector=False)
+    monkeypatch.setattr(retriever, 'settings', dataclasses.replace(retriever.settings,
+        platform_dir=root/'fund-platform', index_dir=index, enable_vector_rag=False))
+    monkeypatch.setattr(retriever, 'CORPUS_PATH', corpus)
+    return root, corpus, index
+
+
+def test_search_tool_contract(indexed_tool):
+    from app.tools.registry import execute, search_docs, TOOL_SCHEMAS
+    result = search_docs(query='苹果估值', top_k=2)
+    assert result['ok'] and result['data']['backend'] == 'bm25'
+    assert result['data']['chunks'][0]['source'] == 'apple.md'
+    assert result['source'] and result['as_of']
+    for args in ({'query': ''}, {'query': ' '}, {'query': 'x'*201}, {'query': '规则', 'top_k': 0},
+                 {'query': '规则', 'top_k': 11}, {'query': '规则', 'path': '/etc/passwd'},
+                 {'query': '规则', 'top_k': '5'}, {}):
+        assert not execute('search_docs', args)['ok']
+    schema = next(s['function']['parameters'] for s in TOOL_SCHEMAS if s['function']['name'] == 'search_docs')
+    assert 'query' in schema['required'] and schema['additionalProperties'] is False
+
+
+def test_tool_missing_and_stale_index(indexed_tool):
+    from app.tools.registry import search_docs
+    root, corpus, index = indexed_tool
+    (root/'apple.md').write_text('changed')
+    result = search_docs(query='苹果')
+    assert not result['ok'] and '索引过期，请重建' in result['error']
+    (index/'manifest.json').unlink()
+    result = search_docs(query='苹果')
+    assert not result['ok'] and 'app.rag.build_index' in result['error']
+
+
+def doc_state(answer, authority='authoritative', text='规则指标为66.6。'):
+    return {'question': '解释规则', 'answer': answer, 'tool_results': [
+        {'ok': True, 'tool': 'search_docs', 'data': {'chunks': [
+            {'source': 'rules.md', 'source_name': '规则.md', 'section': '规则 / 指标',
+             'authority': authority, 'text': text}]}}]}
+
+
+def test_citation_validation():
+    from app.graph import verify
+    assert verify(doc_state('指标66.6。[来源: 规则.md §规则]'))['verified']
+    assert not verify(doc_state('指标66.6。[来源: 不存在的文件 §X]'))['verified']
+    assert not verify(doc_state('指标66.6。'))['verified']
+    assert not verify(doc_state('规则说明。[来源: 规则.md]'))['verified']
+
+
+@pytest.mark.parametrize('authority,valid', [('authoritative', True), ('background', False), ('historical', False)])
+def test_authority_numeric_boundary(authority, valid):
+    from app.graph import verify
+    assert verify(doc_state('指标66.6。[来源: 规则.md §规则]', authority=authority))['verified'] is valid
+
+
+def test_obsolete_values_need_local_marker():
+    from app.graph import verify
+    assert not verify(doc_state('收益19.8%。[来源: 规则.md §规则]', text='曾写19.8。'))['verified']
+    assert verify(doc_state('旧值禁用19.8%。[来源: 规则.md §规则]', authority='historical', text='曾写19.8。'))['verified']
+    assert not verify(doc_state('历史说明。收益19.8%。[来源: 规则.md §规则]', text='曾写19.8。'))['verified']
+
+
+def test_document_graph_offline(indexed_tool, monkeypatch):
+    import app.graph as g
+    monkeypatch.setattr(g, 'get_llm', lambda: (_ for _ in ()).throw(RuntimeError('offline')))
+    state = g.graph.invoke({'question': '苹果估值规则是什么？'})
+    assert 'search_docs' in state['route']
+    assert '[来源: apple.md §' in state['answer'] and state['verified']
+    assert len(state['answer']) <= 300
+
+
+def test_golden_quote_check_rejects_missing_text(mini_corpus):
+    from app.rag.build_index import check_golden
+    root, corpus, index = mini_corpus
+    build(root, corpus, index, vector=False)
+    golden = root/'golden.yaml'
+    golden.write_text(yaml.safe_dump({'questions': [{'id': 'Q', 'source': 'apple.md',
+        'source_quote': '苹果估值低于阈值时满分。'}]}, allow_unicode=True))
+    assert check_golden(index, golden)
+    golden.write_text(yaml.safe_dump({'questions': [{'id': 'Q', 'source': 'apple.md',
+        'source_quote': '原文没有这句话'}]}, allow_unicode=True))
+    assert not check_golden(index, golden)
+
+
+def test_short_paragraph_and_table_stay_together(mini_corpus):
+    root, _, _ = mini_corpus
+    chunks = chunks_for(root/'risk.docx', root, 'authoritative')
+    assert any('产品等级不得超过承受能力。' in c['text'] and '| 等级 | 产品 |' in c['text'] for c in chunks)
+    assert all(len(c['text']) <= 800 for c in chunks)
+
+
+def test_score_ranges_keep_positive_bounds_and_drawdown_sign():
+    from app.graph import verify
+    state = doc_state('分数段21-40分，最大回撤-14.27%。[来源: 规则.md §规则]',
+                      text='分数段21 - 40分，最大回撤-14.27%。')
+    assert verify(state)['verified']
+    state['answer'] = '分数段21-40分，最大回撤14.27%。[来源: 规则.md §规则]'
+    assert not verify(state)['verified']
+
+
+def test_known_source_filename_is_metadata_not_a_numeric_claim():
+    from app.graph import verify
+    state = {'question': '危机回撤', 'answer': '根据PPT素材/4-压力测试表.csv，最大回撤-13.6%。',
+             'tool_results': [{'ok': True, 'tool': 'get_drawdown_recovery',
+                 'source': 'PPT素材/4-压力测试表.csv', 'data': {'最大回撤': '-13.6%'}}]}
+    assert verify(state)['verified']
+    state['answer'] += '指标62.7。'
+    assert not verify(state)['verified']

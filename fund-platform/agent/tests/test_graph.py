@@ -88,8 +88,9 @@ def test_api(monkeypatch, tmp_path):
     assert '33.9' in data['answer'] and '下行' in data['answer'] and data['verified']
     assert data['thread_id'] == 'test' and data['tool_calls'][0]['ok']
     assert client.post('/chat', json={'question': '  '}).status_code == 422
-    assert client.get('/healthz').json()['rag_enabled'] is False
-    assert len(client.get('/tools').json()) == 8
+    assert client.get('/healthz').json()['rag_enabled'] is True
+    assert client.get('/healthz').json()['vector_rag_enabled'] == api.settings.enable_vector_rag
+    assert len(client.get('/tools').json()) == 9
     monkeypatch.setattr(registry, 'settings', dataclasses.replace(registry.settings, score_path=tmp_path/'missing.csv'))
     data = client.post('/chat', json={'question': '最新评分'}).json()
     assert not data['tool_calls'][0]['ok'] and '当前数据无法回答' in data['answer']
@@ -165,3 +166,15 @@ def test_score_unit_repair_is_bounded(monkeypatch):
     state = g.graph.invoke({'question': '最新评分'})
     assert not state['verified'] and state['attempts'] == 2
     assert '分制' in state['error']
+
+
+def test_caveat_answer_keeps_subject_when_model_omits_it(monkeypatch):
+    class BriefLLM(OfflineLLM):
+        def invoke(self, messages):
+            return SimpleNamespace(content='缺失975行，填零457行。')
+    monkeypatch.setattr(g, 'get_llm', lambda: BriefLLM())
+    state = g.intake({'question': '北向资金数据缺口'})
+    state['tool_results'] = [registry.get_data_caveats()]
+    answer = g.compose(state)
+    assert answer['answer'].startswith('北向资金：')
+    assert g.verify(state | answer)['verified']

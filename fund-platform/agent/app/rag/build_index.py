@@ -20,7 +20,7 @@ def check_golden(index_dir, golden_path):
     items = data['questions']
     failed = []
     for item in items:
-        matched = any(c['source'] == item['source'] and normalize(item['source_quote']) in normalize(c['text']) for c in chunks)
+        matched = any(c['source'] == item['source'] and item['source_quote'] in c['text'] for c in chunks)
         print(f"{item['id']} {'PASS' if matched else 'FAIL'}")
         if not matched:
             failed.append(item['id'])

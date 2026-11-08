@@ -44,7 +44,7 @@ def chat(request: ChatRequest):
 
 @app.get("/healthz")
 def healthz():
-    return dict(status="ok", model=settings.deepseek_model, rag_enabled=False)
+    return dict(status="ok", model=settings.deepseek_model, rag_enabled=True, vector_rag_enabled=settings.enable_vector_rag)
 
 
 @app.get("/tools")

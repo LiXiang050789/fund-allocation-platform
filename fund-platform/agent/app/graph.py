@@ -13,6 +13,8 @@ from langgraph.graph import END, START, StateGraph
 
 from app.config import settings
 from app.tools import registry
+from app.rag.citations import (DOC_REF, citation, citation_matches, document_text,
+                               marked_numbers, retrieved_chunks)
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +33,7 @@ class AgentState(TypedDict, total=False):
     pending: list[dict]
     rounds: int
     correction: str
+    llm_events: list[dict]
 
 
 @lru_cache(maxsize=1)
@@ -44,7 +47,7 @@ def refusal(question):
     return any(w in question for w in ("推荐股票", "涨停", "保证收益", "明天涨跌", "全仓", "保证", "明天"))
 
 
-def fallback_calls(question):
+def data_fallback_calls(question):
     q = question.upper()
     dates = re.findall(r"\d{4}-\d{2}-\d{2}", q)
     strategy = next((s for s in ("动态评分", "LGB", "SASF", "PPO", "等权", "MVO", "风险平价", "动量", "沪深300") if s in q), None)
@@ -75,26 +78,48 @@ def fallback_calls(question):
     return [{"name": name, "args": args}]
 
 
+def document_question(question):
+    words = ("规则", "定义", "为什么", "流程", "问卷", "费率", "PPO设计", "PPO 设计", "文档口径", "2019cut", "前视", "切割", "权重", "满分", "打分", "如何计分", "映射", "状态空间", "奖励", "手册", "设计文档")
+    return any(word.lower() in question.lower() for word in words) or question.strip().upper() == "PPO"
+
+
+def fallback_calls(question):
+    if any(word in question for word in ("涨停", "推荐股票", "全仓")):
+        return [{"name": "search_docs", "args": {"query": "风险匹配 产品适当性 风险等级"}}]
+    if "保证" in question:
+        return [{"name": "get_strategy_metrics", "args": {}}]
+    data = data_fallback_calls(question)
+    if document_question(question):
+        docs = [{"name": "search_docs", "args": {"query": question[:200]}}]
+        if any(w in question for w in ("最新", "当前", "今天", "实际数据")):
+            return docs + data
+        return docs
+    return data
+
+
 def intake(state):
     return dict(question=state["question"].strip(), route=[], tool_results=[], tool_calls=[],
-                pending=[], citations=[], attempts=0, rounds=0, error=None, verified=False,
+                pending=[], citations=[], attempts=0, rounds=0, error=None, verified=False, llm_events=[],
                 answer="当前数据无法回答：问题为空。")
 
 
 def router(state):
     calls = []
+    events = list(state.get("llm_events", []))
     try:
         response = get_llm().bind_tools(registry.TOOL_SCHEMAS).invoke([
-            SystemMessage(content="只选择回答问题必需的只读工具。日期、策略名称必须来自问题。数据维度用get_data_caveats；状态计数用get_market_state_summary。禁止调用白名单外工具。"),
+            SystemMessage(content="只选择回答问题必需的只读工具。日期、策略名称必须来自问题。规则/定义/为什么/流程/问卷/费率/PPO设计/文档口径/前视解释用search_docs，query保留原问题及其关键概念。具体日期市场评分和策略回测指标用数据工具；两者都需要时同时调用。评分系统权重与满分是文档规则，不是最新市场评分；C1-C5产品匹配是文档规则，C2/C3/C4策略收益是get_risk_tier。实际北向缺口与特征维度用get_data_caveats；状态计数用get_market_state_summary。拒答问题可以查风险适当性或历史指标，不得推荐个股。禁止调用白名单外工具。"),
             HumanMessage(content=state["question"] + ("\n上轮结果：" + json.dumps(state["tool_results"], ensure_ascii=False) if state["rounds"] else ""))])
         calls = response.tool_calls
+        events.append({"stage": "router", "status": "success"})
         if not calls or any(c.get("name") not in registry.REGISTRY for c in calls):
             calls = fallback_calls(state["question"])
     except Exception as exc:
+        events.append({"stage": "router", "status": "error", "error": type(exc).__name__})
         log.warning("router LLM failed: %s", type(exc).__name__)
         calls = fallback_calls(state["question"])
     return dict(pending=[{"name": c["name"], "args": c.get("args", {})} for c in calls[:8]],
-                route=state["route"] + [c["name"] for c in calls[:8]], rounds=state["rounds"]+1)
+                route=state["route"] + [c["name"] for c in calls[:8]], rounds=state["rounds"]+1, llm_events=events)
 
 
 def tools(state):
@@ -135,6 +160,19 @@ def evidence_answer(question, results):
                 parts.append(f"全表 {dims['all']['columns']} 列，{dims['all']['features']} 个特征；LGB {dims['LGB']['features']} 维；PPO {dims['PPO']['features']} 维")
             else:
                 parts.append(f"数据 {data['start']} 至 {data['end']}，{data['trading_days']} 个交易日；宏观滞后 {data['macro_lag']} 个交易日；截止距今 {data['months_since_cutoff']} 个月")
+        elif name == "search_docs":
+            chunks = data.get("chunks", [])
+            if chunks:
+                chunk = chunks[0]
+                text = document_text(chunk)
+                # Extract complete source clauses, never synthesize unsupported figures.
+                clauses = re.split(r"(?<=[。；])|\n", text)
+                excerpt = ""
+                for clause in clauses:
+                    clause = clause.strip()
+                    if clause and not marked_numbers(clause)[1] and len(excerpt+clause) <= 130:
+                        excerpt += clause
+                parts.append((excerpt or "文档依据不足，当前数据无法回答。") + citation(chunk))
         else:
             rows = data.get("rows", [])
             strategies = [s for s in ("动态评分", "LGB", "SASF", "等权", "PPO", "MVO", "动量", "风险平价") if s in question.upper()]
@@ -159,43 +197,71 @@ POLICY = "无法预测明天涨跌或涨停，不能推荐个股或全仓操作�
 
 
 def compose(state):
+    events = list(state.get("llm_events", []))
     usable = [r for r in state["tool_results"] if r["ok"]]
-    citations = list(dict.fromkeys(s for r in usable for s in r["source"].split("; ") if s))
-    if any(r["tool"] == "get_data_caveats" for r in usable):
+    docs = retrieved_chunks(usable)
+    data_results = [r for r in usable if r["tool"] != "search_docs"]
+    sources = list(dict.fromkeys(s for r in data_results for s in r["source"].split("; ") if s))
+    if any(r["tool"] == "get_data_caveats" for r in data_results):
         question = state["question"]
         primary = ("scripts/calc_market_score.py" if "滞后" in question else
                    "data/clean/train_total_feature.csv" if any(w in question for w in ("北向", "特征", "维", "列")) else
                    "data/clean/market_score_daily.csv")
-        citations.sort(key=lambda source: source != primary)
+        sources.sort(key=lambda source: source != primary)
     answer = evidence_answer(state["question"], usable)
     if refusal(state["question"]):
         answer = POLICY
     elif usable:
         try:
+            evidence = []
+            for result in usable:
+                if result["tool"] == "search_docs":
+                    evidence.append({**result, "data": {**result["data"], "chunks": [
+                        {**chunk, "text": document_text(chunk), "citation": citation(chunk)}
+                        for chunk in result["data"]["chunks"]]}})
+                else:
+                    evidence.append(result)
             response = get_llm().invoke([
-                SystemMessage(content="只用提供的tool_results回答，数字只能来自证据。中文简洁回答，正文不超过180字，不写引用路径。仅回答市场评分分项时使用估值/宏观/情绪/趋势标签。其他问题按原问题的主题回答，保留主题名称，不强加评分标签。只有收益率、回撤、波动率及夏普/卡玛/索提诺等比例指标可以使用百分比，夏普/卡玛/索提诺通常保留比率原值。市场评分、分项分数保持分制，交易日数、维度、列数、天数、排名保持计数单位，均不得加百分号。不提供个性化投资建议。"),
-                HumanMessage(content=json.dumps({"question": state["question"], "tool_results": usable,
+                SystemMessage(content="只用提供的tool_results回答，数字只能来自证据。中文简洁回答，正文不超过140字；引用和免责声明也计入总长300字。仅回答市场评分分项时使用估值/宏观/情绪/趋势标签。其他问题保留原主题名称，不强加评分标签。累计收益、年化收益、最大回撤、年化波动等比例字段，原始小数乘100写成百分比，保留两位小数，避免一位小数损失原始精度；夏普/卡玛/索提诺保留比率原值。市场评分和分项使用分制；交易日、维度/列数、天数、排名使用计数单位，均不得加百分号。文档解释至少逐字复制一条chunk的citation，不得编造引用；选择直接支持答案的章节。文档中的数字仅authoritative可用，background/historical只解释背景，不得引用其事实数字。旧值/禁用清单只可标为旧值，不得作为当前事实。涉及数据口径时说明实际数据以数据工具为准。发现文档算术矛盾时仅说明矛盾并照录原值，不得计算或写出证据没有的合计数。不提供个性化投资建议。"),
+                HumanMessage(content=json.dumps({"question": state["question"], "tool_results": evidence,
                                                  "correction": state.get("correction", "")}, ensure_ascii=False))])
+            events.append({"stage": "compose", "status": "success"})
             if isinstance(response.content, str) and response.content.strip():
                 answer = response.content.strip()
         except Exception as exc:
+            events.append({"stage": "compose", "status": "error", "error": type(exc).__name__})
             log.warning("compose LLM failed: %s", type(exc).__name__)
+    if "北向" in state["question"] and any(r["tool"] == "get_data_caveats" for r in usable) and "北向" not in answer:
+        answer = "北向资金：" + answer
+    matched, _ = citation_matches(answer, docs)
+    doc_references = list(dict.fromkeys(citation(c) for c in matched))
+    if docs and not doc_references:
+        doc_references = [citation(docs[0])]
+    # Move citations to a reserved footer so length limiting cannot remove half a citation.
+    body = DOC_REF.sub("", answer)
+    body = re.sub(r"\[source:.*?\]", "", body, flags=re.S).strip()
+    references = [f"[source: {sources[0]}]"] if sources else []
+    references += doc_references[:1]
+    # Preserve a forged model reference for the verifier instead of silently repairing it.
+    for name, section in DOC_REF.findall(answer):
+        reference = f"[来源: {name} §{section}]"
+        if not any(c["source_name"] == name.strip() and c["section"].startswith(section.strip()) for c in docs):
+            references.append(reference)
     suffix = "不构成投资建议。"
-    if suffix not in answer:
-        answer = answer.rstrip("。 ") + "。" + suffix
-    reference = f"\n[source: {citations[0]}]" if citations else ""
-    limit = 300 - len(reference)
-    if len(answer) > limit:
-        # Keep complete clauses so truncation cannot change a numerical value.
-        clauses = re.findall(r"[^。；\n]+[。；\n]?", answer.replace(suffix, ""))
+    if docs and any(w in state["question"] for w in ("口径", "对齐", "缺失", "缺口", "数据", "停更", "满分", "权重")):
+        suffix = "实际数据以数据工具为准。" + suffix
+    body = body.replace("不构成投资建议。", "").replace("实际数据以数据工具为准。", "").strip()
+    footer = "\n" + "\n".join(dict.fromkeys(references)) if references else ""
+    limit = 300 - len(footer) - len(suffix)
+    if len(body) > limit:
         kept = ""
-        for clause in clauses:
-            if len(kept + clause + suffix) > limit:
+        for clause in re.findall(r"[^。；\n]+[。；\n]?", body):
+            if len(kept + clause) > limit:
                 break
             kept += clause
-        answer = (kept or "当前数据无法回答：回答超出长度限制。") + suffix
-    answer += reference
-    return dict(answer=answer, citations=citations, attempts=state["attempts"]+1)
+        body = kept or "当前数据无法回答：回答超出长度限制。"
+    answer = body.rstrip("。 ") + "。" + suffix + footer
+    return dict(answer=answer, citations=list(dict.fromkeys(sources+doc_references)), attempts=state["attempts"]+1, llm_events=events)
 
 
 def numeric_values(value):
@@ -206,7 +272,9 @@ def numeric_values(value):
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return [float(value)]
     if isinstance(value, str):
-        return [float(n) for n in re.findall(r"-?\d+(?:\.\d+)?", strip_dates(value))]
+        text = strip_dates(value)
+        text = re.sub(r"(?<=\d)[-–—](?=\d)", " 至 ", text)
+        return [float(n) for n in re.findall(r"-?\d+(?:\.\d+)?", text)]
     return []
 
 
@@ -226,15 +294,31 @@ def score_unit_error(body, results):
 
 def verify(state):
     # Citations are metadata, not numerical claims.
-    body = re.sub(r"\[source:.*?\]", "", state["answer"], flags=re.S)
-    values = numeric_values([r["data"] for r in state["tool_results"] if r["ok"]])
+    body = DOC_REF.sub("", re.sub(r"\[source:.*?\]", "", state["answer"], flags=re.S))
+    for result in state["tool_results"]:
+        if result.get("ok"):
+            for source in result.get("source", "").split("; "):
+                if source:
+                    body = body.replace(source, "").replace(source.rsplit("/", 1)[-1], "")
+    docs = retrieved_chunks(state["tool_results"])
+    matched, invalid_refs = citation_matches(state["answer"], docs)
+    values = numeric_values([r["data"] for r in state["tool_results"] if r["ok"] and r.get("tool") != "search_docs"])
+    values += numeric_values([c["text"] for c in docs if c["authority"] == "authoritative"])
+    obsolete_allowed, obsolete_violations = marked_numbers(body)
+    values += obsolete_allowed
+    needs_reference = bool(docs) and "当前数据无法回答" not in body
+    reference_valid = not invalid_refs and (not needs_reference or bool(matched))
     allowed = {0, 1, 2, 3, 5, 7, 10, 100}
     unsupported = [n for n in numeric_values(body) if n not in allowed and not any(
         abs(n-v) <= .1+1e-9 or abs(n/100-v) <= .001+1e-9 or abs(n-v*100) <= .1+1e-9 for v in values)]
     compliant = not refusal(state["question"]) or any(w in body for w in ("不构成投资建议", "无法预测", "不能保证"))
     unit_error = score_unit_error(body, state["tool_results"])
-    valid = not unsupported and compliant and not unit_error and len(state["answer"]) <= 300
+    valid = not unsupported and compliant and not unit_error and reference_valid and not obsolete_violations and len(state["answer"]) <= 300
     correction = f"删除证据不支持的数值{unsupported}；仅引用tool_results，遵守拒答政策和字数限制。" if not valid else ""
+    if not reference_valid:
+        correction += "引用缺失或伪造：只使用本轮chunk文件名和章节前缀，至少包含一条合法文档引用。"
+    if obsolete_violations:
+        correction += "出现禁用旧值；删除或明确标记旧值，禁止当作当前事实。"
     if unit_error:
         correction += "市场评分及分项使用分制，删除错误百分号并保留原始分数，不得改动数值。"
     return dict(verified=valid, correction=correction, error=correction or None)

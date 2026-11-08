@@ -6,13 +6,14 @@ import functools
 import inspect
 import json
 import logging
+import re
 import time
 from datetime import date as Date
 from pathlib import Path
-from typing import get_type_hints
+from typing import Annotated, get_type_hints
 
 import pandas as pd
-from pydantic import ConfigDict, create_model
+from pydantic import ConfigDict, Field, create_model
 
 from app.config import settings
 
@@ -35,9 +36,9 @@ def table(relative, *, encoding="utf-8-sig", cols=None, header=False):
 
 def tool(source):
     def decorate(fn):
-        sig, hints = inspect.signature(fn), get_type_hints(fn)
+        sig, hints = inspect.signature(fn), get_type_hints(fn, include_extras=True)
         model = create_model(fn.__name__ + "Args", __config__=ConfigDict(extra="forbid", strict=True),
-                             **{k: (hints[k], p.default) for k, p in sig.parameters.items()})
+                             **{k: (hints[k], ... if p.default is inspect.Parameter.empty else p.default) for k, p in sig.parameters.items()})
 
         @functools.wraps(fn)
         def safe(*positional, **args):
@@ -46,8 +47,11 @@ def tool(source):
             try:
                 args = sig.bind(*positional, **args).arguments
                 validated = model(**args).model_dump()
-                data, as_of = fn(**validated)
+                payload = fn(**validated)
+                data, as_of = payload[:2]
                 result.update(ok=True, data=data, as_of=as_of)
+                if len(payload) == 3:
+                    result["source"] = payload[2]
             except Exception as exc:
                 result["error"] = f"{type(exc).__name__}: {exc}"
             log.info(json.dumps(dict(name=fn.__name__, args=args,
@@ -68,9 +72,17 @@ def select(df, column, value):
         return df
     key = str(value).replace(" ", "").lower()
     names = df[column].astype(str).str.replace(" ", "").str.lower()
+    if column in {"阶段", "危机阶段"}:
+        def normalize_phase(text):
+            return text.replace("期间", "").replace("阶段", "").replace("年", "").removesuffix("期")
+        key = normalize_phase(key)
+        names = names.map(normalize_phase)
     mask = names.eq(key)
     if not mask.any():
         mask = names.str.contains(key, regex=False)
+    if not mask.any() and column in {"阶段", "危机阶段"} and len(key) >= 2:
+        # Permit omitted qualifiers (e.g. a crisis's half-year qualifier) in natural labels.
+        mask = names.str.contains(".*?".join(re.escape(char) for char in key), regex=True)
     if not mask.any():
         raise ValueError(f"未知{column}: {value}；可选值: {', '.join(df[column].unique())}")
     return df[mask]
@@ -195,6 +207,18 @@ def get_data_caveats():
                 zero_rows=len(zero), last_valid_date=valid.date.iloc[-1] if len(valid) else None,
                 macro_lag=lag, dimensions=dimensions, months_since_cutoff=months,
                 caveat="仅为历史回测演示数据，不是实时行情；宏观月度指标按交易日滞后以防前视"), df.date.iloc[-1]
+
+
+@tool("")
+def search_docs(query: Annotated[str, Field(min_length=1, max_length=200)],
+                top_k: Annotated[int, Field(ge=1, le=10)] = 5):
+    """检索文档规则、定义、问卷、费率、PPO设计与防前视解释；不查询当前策略指标。"""
+    if not query.strip():
+        raise ValueError("query 不得为空")
+    from app.rag.retriever import search
+    data, as_of = search(query.strip(), top_k)
+    sources = list(dict.fromkeys(c["source_name"] for c in data["chunks"]))[:5]
+    return data, as_of, "; ".join(sources)
 
 
 def execute(name, args):

@@ -186,4 +186,18 @@ def chunks_for(path, root, authority):
             if block.get('numbering'):
                 numbering.append(block['numbering'])
     flush()
-    return chunks
+    # Keep a short paragraph and its adjacent table in the same evidence unit.
+    # Every table row stays intact; oversized tables were already split with headers.
+    merged = []
+    for chunk in chunks:
+        if merged and merged[-1]['section'] == chunk['section'] and len(merged[-1]['text']+'\n'+chunk['text']) <= 800:
+            previous = merged[-1]
+            previous['text'] += '\n' + chunk['text']
+            previous['styles'] = sorted(set(previous['styles'] + chunk['styles']))
+            previous['numbering'] += chunk['numbering']
+        else:
+            merged.append(chunk)
+    for ordinal, chunk in enumerate(merged):
+        identity = f"{source}\0{chunk['section']}\0{ordinal}\0{chunk['text']}"
+        chunk['chunk_id'] = hashlib.sha256(identity.encode()).hexdigest()[:24]
+    return merged
