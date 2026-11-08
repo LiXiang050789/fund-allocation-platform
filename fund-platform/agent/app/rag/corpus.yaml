@@ -1,0 +1,18 @@
+version: 1
+files:
+  - path: 项目彻底理解手册-答辩备战版.md
+    authority: authoritative
+  - path: fund-platform/README.md
+    authority: authoritative
+  - path: fund-platform/docs/评分系统金融规则.docx
+    authority: authoritative
+  - path: fund-platform/docs/风险等级划分规则.docx
+    authority: authoritative
+  - path: fund-platform/docs/用户画像测评问卷+打分规则.docx
+    authority: authoritative
+  - path: fund-platform/docs/已有信息下ETF实际费率与5bp的对比(1).docx
+    authority: authoritative
+  - path: fund-platform/docs/强化学习.txt
+    authority: background
+  - path: 项目书修订说明.md
+    authority: historical

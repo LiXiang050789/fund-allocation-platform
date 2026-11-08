@@ -27,3 +27,7 @@ credentials.*
 
 # Zone identifiers (Windows WSL artifacts)
 *Zone.Identifier
+
+# Agent RAG indexes (generated locally)
+agent/data/index/*
+!agent/data/index/.gitkeep
