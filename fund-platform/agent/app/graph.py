@@ -173,7 +173,7 @@ def compose(state):
     elif usable:
         try:
             response = get_llm().invoke([
-                SystemMessage(content="只用提供的tool_results回答，数字只能来自证据。中文简洁回答，正文不超过180字，不写引用路径。仅回答市场评分分项时使用估值/宏观/情绪/趋势标签。其他问题按原问题的主题回答，保留主题名称，不强加评分标签。比例转换成百分数，保留两位小数。不提供个性化投资建议。"),
+                SystemMessage(content="只用提供的tool_results回答，数字只能来自证据。中文简洁回答，正文不超过180字，不写引用路径。仅回答市场评分分项时使用估值/宏观/情绪/趋势标签。其他问题按原问题的主题回答，保留主题名称，不强加评分标签。只有收益率、回撤、波动率及夏普/卡玛/索提诺等比例指标可以使用百分比，夏普/卡玛/索提诺通常保留比率原值。市场评分、分项分数保持分制，交易日数、维度、列数、天数、排名保持计数单位，均不得加百分号。不提供个性化投资建议。"),
                 HumanMessage(content=json.dumps({"question": state["question"], "tool_results": usable,
                                                  "correction": state.get("correction", "")}, ensure_ascii=False))])
             if isinstance(response.content, str) and response.content.strip():
@@ -215,6 +215,15 @@ def strip_dates(text):
     return re.sub(r"(?<!\d)(?:19|20)\d{2}年?(?!\d)", "", text)
 
 
+def score_unit_error(body, results):
+    if not any(r.get("ok") and r.get("tool") == "get_market_score" for r in results):
+        return False
+    return bool(re.search(
+        r"(?:评分|分项|得分|总分|估值|宏观|情绪|趋势)"
+        r"(?:为|是|分别|分数|得分|评分|\s|[:：=、]|\*)*"
+        r"[-+]?\d+(?:\.\d+)?\s*[%％]", body))
+
+
 def verify(state):
     # Citations are metadata, not numerical claims.
     body = re.sub(r"\[source:.*?\]", "", state["answer"], flags=re.S)
@@ -223,8 +232,11 @@ def verify(state):
     unsupported = [n for n in numeric_values(body) if n not in allowed and not any(
         abs(n-v) <= .1+1e-9 or abs(n/100-v) <= .001+1e-9 or abs(n-v*100) <= .1+1e-9 for v in values)]
     compliant = not refusal(state["question"]) or any(w in body for w in ("不构成投资建议", "无法预测", "不能保证"))
-    valid = not unsupported and compliant and len(state["answer"]) <= 300
+    unit_error = score_unit_error(body, state["tool_results"])
+    valid = not unsupported and compliant and not unit_error and len(state["answer"]) <= 300
     correction = f"删除证据不支持的数值{unsupported}；仅引用tool_results，遵守拒答政策和字数限制。" if not valid else ""
+    if unit_error:
+        correction += "市场评分及分项使用分制，删除错误百分号并保留原始分数，不得改动数值。"
     return dict(verified=valid, correction=correction, error=correction or None)
 
 

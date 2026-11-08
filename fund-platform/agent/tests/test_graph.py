@@ -141,3 +141,27 @@ def test_caveat_citations_follow_evidence_topic():
     macro = g.graph.invoke({'question': '宏观指标滞后口径'})
     assert macro['citations'][0] == 'scripts/calc_market_score.py'
     assert '[source: scripts/calc_market_score.py]' in macro['answer']
+
+
+@pytest.mark.parametrize('answer,valid', [
+    ('市场总评分为33.90%', False), ('市场总评分为33.90分', True),
+    ('分项：估值0.00%、宏观14.08%', False), ('年化13.13%，最大回撤-14.27%', True),
+    ('市场评分33.90分；年化13.13%', True), ('市场评分为 **33.90％**', False),
+])
+def test_score_units(answer, valid):
+    state = {'question': '评分和收益', 'answer': answer, 'tool_results': [
+        {'ok': True, 'tool': 'get_market_score', 'data': {'score': 33.9, 'val': 0, 'macro': 14.08}},
+        {'ok': True, 'tool': 'get_strategy_metrics', 'data': {'return': .1313, 'drawdown': -.1427}}]}
+    assert g.verify(state)['verified'] is valid
+
+
+def test_score_unit_repair_is_bounded(monkeypatch):
+    class ScoreLLM(OfflineLLM):
+        def invoke(self, messages):
+            if '只选择' in messages[0].content:
+                return SimpleNamespace(tool_calls=[])
+            return SimpleNamespace(content='市场总评分为33.90%')
+    monkeypatch.setattr(g, 'get_llm', lambda: ScoreLLM())
+    state = g.graph.invoke({'question': '最新评分'})
+    assert not state['verified'] and state['attempts'] == 2
+    assert '分制' in state['error']
