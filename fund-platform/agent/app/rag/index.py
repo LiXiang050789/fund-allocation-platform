@@ -39,8 +39,28 @@ def write_json(path, data):
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
 
 
+def missing_corpus(root, corpus_path):
+    root = Path(root).resolve()
+    missing = []
+    for entry in load_corpus(corpus_path):
+        path = (root / entry['path']).resolve()
+        if not path.is_relative_to(root):
+            raise ValueError('语料路径越界')
+        if not path.is_file():
+            missing.append(entry['path'])
+    return missing
+
+
+def require_corpus(root, corpus_path):
+    missing = missing_corpus(root, corpus_path)
+    if missing:
+        raise ValueError('语料缺失: ' + ', '.join(missing) +
+                         '；请把文件放到仓库根目录，或从 corpus.yaml 移除。')
+
+
 def build(root, corpus_path, index_dir, *, vector=True, encoder=None):
     root, index_dir = Path(root), Path(index_dir)
+    require_corpus(root, corpus_path)
     files = load_corpus(corpus_path)
     chunks, manifest_files = [], []
     for entry in files:
@@ -90,6 +110,9 @@ def build(root, corpus_path, index_dir, *, vector=True, encoder=None):
 
 def validate(root, corpus_path, index_dir):
     index_dir = Path(index_dir)
+    if not (index_dir/'manifest.json').is_file():
+        raise ValueError(f'索引缺失，请重建：{REBUILD}')
+    require_corpus(root, corpus_path)
     try:
         manifest = json.loads((index_dir/'manifest.json').read_text(encoding='utf-8'))
         files = load_corpus(corpus_path)
@@ -105,6 +128,6 @@ def validate(root, corpus_path, index_dir):
                 raise ValueError('索引过期，请重建')
         return manifest
     except FileNotFoundError as exc:
-        raise ValueError(f'索引缺失或语料缺失，请重建：{REBUILD}') from exc
+        raise ValueError(f'索引缺失，请重建：{REBUILD}') from exc
     except Exception as exc:
-        raise ValueError(f'索引过期，请重建或检查加载文件：{REBUILD} ({type(exc).__name__})') from exc
+        raise ValueError(f'索引过期，请重建：{REBUILD} ({type(exc).__name__})') from exc

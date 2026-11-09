@@ -43,7 +43,7 @@ def evaluate(items, offline=False):
                 recall_at_5=recall, citation_valid=bool(matched) and not invalid,
                 expected_source_cited=any(c['source'] == item['source'] for c in matched),
                 keyword_hits=hits, keyword_total=len(item['expected_keywords']),
-                verified=state['verified'], tool_calls=state['tool_calls'], retrieved=chunks,
+                verified=state['verified'], verification_error=state.get('error'), tool_calls=state['tool_calls'], retrieved=chunks,
                 backends=sorted({r['data']['backend'] for r in state['tool_results'] if r.get('ok') and r.get('tool') == 'search_docs'}),
                 llm_events=state.get('llm_events', []), fails=grade(item, answer),
                 latency_s=round(time.perf_counter()-started, 2))
@@ -74,6 +74,7 @@ def write_reports(summary, results):
     lines += ['', 'Recall@5 按固定全部16题统计。引用指标要求至少一个真实引用，且全部引用可映射。',
               'keyword_coverage 按所有期望关键词统计。数字与关键词明细记录在 results_doc.json 的 fails。',
               '引用只校验片段存在，不保证语义完备。background/historical 的数字不作为当前事实依据。',
+              'Q14 若 Recall 为 0，表示 golden 锚定片段未进入前五，不改动原文锚点。',
               '', '| ID | Recall@5 | 引用合法 | 期望来源 | verified | 关键词 | 失败项 |',
               '|---|---|---|---|---|---|---|']
     for r in results:

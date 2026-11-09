@@ -1,5 +1,6 @@
 """检索引用映射与文档 authority 边界。"""
 import re
+from .textnorm import normalize_text
 
 DOC_REF = re.compile(r'\[来源[:：]\s*(.*?)\s*§\s*([^\]]+)\]')
 # Only used to reject obsolete facts or explicitly discuss obsolete values.
@@ -42,7 +43,7 @@ def citation_matches(answer, chunks):
 def marked_numbers(body):
     """An obsolete number may be quoted as obsolete, never as a current fact."""
     allowed, violations = [], []
-    for clause in re.split(r'[。；\n]', body):
+    for clause in re.split(r'[。；\n]', normalize_text(body)):
         for raw in re.findall(r'-?\d+(?:\.\d+)?', clause):
             value = float(raw)
             if any(abs(abs(value)-old) < 1e-9 for old in OLD_VALUES):

@@ -302,3 +302,95 @@ def test_named_neighbor_enters_candidates(mini_corpus, monkeypatch, caplog):
         result, _ = search('apple.md 独特指标细则', top_k=1, root=root, corpus_path=corpus, index_dir=index, vector=False)
     assert '独特指标' in result['chunks'][0]['text']
     assert 'named_neighbors' in caplog.text
+
+
+def test_missing_corpus_before_build_and_after_build(mini_corpus):
+    from app.rag.build_index import check_corpus
+    root, corpus, index = mini_corpus
+    assert check_corpus(root, corpus)
+    build(root, corpus, index, vector=False)
+    (root/'bond.txt').unlink()
+    (root/'risk.docx').unlink()
+    assert not check_corpus(root, corpus)
+    for action in (build, validate):
+        with pytest.raises(ValueError, match='语料缺失') as exc:
+            action(root, corpus, index)
+        assert 'bond.txt' in str(exc.value) and 'risk.docx' in str(exc.value)
+        assert '索引过期' not in str(exc.value)
+
+
+def test_check_corpus_output(mini_corpus, capsys):
+    from app.rag.build_index import check_corpus
+    root, corpus, _ = mini_corpus
+    assert check_corpus(root, corpus)
+    assert 'corpus_ok=3' in capsys.readouterr().out
+    (root/'bond.txt').unlink()
+    assert not check_corpus(root, corpus)
+    assert 'missing=bond.txt' in capsys.readouterr().out
+
+
+def test_model_without_citation_fails_closed(monkeypatch):
+    from types import SimpleNamespace
+    import app.graph as g
+    result = doc_state('')['tool_results'][0]
+    result['source'] = 'rules.md'
+    class NoCitation:
+        def bind_tools(self, _):
+            return self
+        def invoke(self, messages):
+            if '只选择' in messages[0].content:
+                return SimpleNamespace(tool_calls=[{'name': 'search_docs', 'args': {'query': '规则'}}])
+            return SimpleNamespace(content='规则指标为66.6。')
+    monkeypatch.setattr(g, 'get_llm', lambda: NoCitation())
+    monkeypatch.setattr(g.registry, 'execute', lambda *_: result)
+    state = g.intake({'question': '解释规则'}) | {'tool_results': [result]}
+    answer = g.compose(state)
+    assert '[来源:' not in answer['answer']
+    assert not g.verify(state | answer)['verified']
+    final = g.graph.invoke({'question': '解释规则'})
+    assert final['attempts'] == 2 and not final['verified']
+    assert '[来源:' not in final['answer'] and not final['citations']
+    assert '无法回答' in final['answer']
+    assert '[来源: 规则.md §' in g.evidence_answer('解释规则', [result])
+
+
+def test_unicode_obsolete_value_marker():
+    from app.rag.citations import marked_numbers
+    assert marked_numbers('收益−１９．８％')[1] == [-19.8]
+    assert marked_numbers('旧值收益−１９．８％')[0] == [-19.8]
+
+
+def test_explicit_docx_missing_from_retrieval_fails_verifier():
+    from app.graph import verify
+    state = doc_state('规则说明。[来源: 规则.md §规则]')
+    state['question'] = '评分系统金融规则.docx 如何打分？'
+    result = verify(state)
+    assert not result['verified'] and '评分系统金融规则.docx' in result['correction']
+
+
+def test_named_source_in_first_five_when_top_k_is_larger(mini_corpus, monkeypatch):
+    from app.rag import retriever
+    root, corpus, index = mini_corpus
+    (root/'apple.md').write_text('# 苹果规则\n' + '\n'.join(f'## 段落{i}\n苹果估值'+('规则文字'*200) for i in range(10)))
+    build(root, corpus, index, vector=False)
+    chunks = [json.loads(line) for line in (index/'chunks.jsonl').read_text().splitlines()]
+    apple = [i for i,c in enumerate(chunks) if c['source_name'] == 'apple.md']
+    monkeypatch.setattr(retriever, 'rrf', lambda _: [(i, 1.0) for i in apple[:8]])
+    result, _ = search('苹果估值 bond.txt', top_k=8, root=root, corpus_path=corpus, index_dir=index, vector=False)
+    assert any(c['source_name'] == 'bond.txt' for c in result['chunks'][:5])
+    assert len(result['chunks']) <= 8
+
+
+def test_policy_evidence_omits_structural_circled_labels(monkeypatch):
+    import app.graph as g
+    result = doc_state('', authority='background', text='④ 换手率惩罚：降低交易摩擦成本。')['tool_results'][0]
+    result['source'] = 'rules.md'
+    state = g.intake({'question': '保证收益吗？'}) | {'tool_results': [result]}
+    output = g.compose(state)
+    assert '④' not in output['answer'] and '[来源:' in output['answer']
+    assert g.verify(state | output)['verified']
+
+
+def test_abstention_without_citation_is_not_verified():
+    from app.graph import verify
+    assert not verify(doc_state('当前数据无法回答。'))['verified']

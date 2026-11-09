@@ -6,7 +6,8 @@ from pathlib import Path
 import yaml
 
 from app.config import settings
-from .index import build
+from .index import build, missing_corpus
+from .ingest import load_corpus
 from .retriever import CORPUS_PATH
 
 
@@ -28,11 +29,24 @@ def check_golden(index_dir, golden_path):
     return not failed
 
 
+def check_corpus(root, corpus_path):
+    missing = missing_corpus(root, corpus_path)
+    if missing:
+        print('missing=' + ','.join(missing))
+        print('请把文件放到仓库根目录，或从 corpus.yaml 移除。')
+        return False
+    print(f'corpus_ok={len(load_corpus(corpus_path))}')
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--check-corpus', action='store_true')
     parser.add_argument('--check-golden', action='store_true')
     parser.add_argument('--bm25-only', action='store_true')
     args = parser.parse_args()
+    if args.check_corpus:
+        return 0 if check_corpus(settings.platform_dir.parent, CORPUS_PATH) else 1
     if args.check_golden:
         return 0 if check_golden(settings.index_dir, settings.agent_dir/'eval/doc_golden_set.yaml') else 1
     manifest = build(settings.platform_dir.parent, CORPUS_PATH, settings.index_dir,

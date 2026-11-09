@@ -25,16 +25,22 @@ import yaml
 from dotenv import load_dotenv
 
 AGENT_DIR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(AGENT_DIR))
+from app.rag.textnorm import normalize_text, numeric_text
+
 PLATFORM_DIR = AGENT_DIR.parent
 EVAL_DIR = Path(__file__).resolve().parent
 load_dotenv(AGENT_DIR / ".env")
 
-NUM_RE = re.compile(r"-?\d[\d,]*(?:\.\d+)?")
+NUM_RE = re.compile(r"-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?")
 
 
 def extract_numbers(text: str) -> list[float]:
     out = []
-    for raw in NUM_RE.findall(text or ""):
+    text = numeric_text(text or "")
+    # Date and range separators never denote a unary negative sign.
+    text = re.sub(r"(?<=\d)[-–—](?=\d)", " ", text)
+    for raw in NUM_RE.findall(text):
         try:
             out.append(float(raw.replace(",", "")))
         except ValueError:
@@ -180,7 +186,7 @@ def run_agent(items: list[dict]) -> list[dict]:
                       answer=answer, latency_s=round(time.perf_counter()-started, 2),
                       fails=fails, golden_answer=item.get("golden_answer", ""), source=item.get("source", ""),
                       tool_calls=calls, tool_selection_correct=selected, citation_supported=supported,
-                      verified=state.get("verified", False), citations=state.get("citations", []),
+                      verified=state.get("verified", False), verification_error=state.get("error"), citations=state.get("citations", []),
                       llm_events=state.get("llm_events", []))
         result["pass"] = not fails
         results.append(result)
@@ -211,6 +217,7 @@ def summarize(results: list[dict], mode: str) -> dict:
         "latency_p95": lat[min(len(lat) - 1, int(len(lat) * 0.95))] if lat else None,
         "citation_support_rate": 0.0 if mode == "baseline" else round(sum(r.get("citation_supported", False) for r in results) / total, 4),
         "tool_selection_accuracy": round(sum(r.get("tool_selection_correct", False) for r in results) / total, 4) if mode == "agent" else None,
+        "verified_rate": sum(r.get("verified", False) for r in results) / total if mode == "agent" else None,
         "llm_error_count": sum(e["status"] == "error" for r in results for e in r.get("llm_events", [])),
         "citation_note": "baseline 无检索、无引用，按定义记 0" if mode == "baseline" else "按全部题目统计成功工具 source 路径的引用",
     }
@@ -230,6 +237,8 @@ def write_report(summary: dict, results: list[dict], system_prompt: str) -> None
         f"- 引用支持率：{summary.get('citation_support_rate')}（{summary.get('citation_note', '')}）",
         f"- 延迟 p50/p95：{summary['latency_p50']}s / {summary['latency_p95']}s",
         "",
+        f"- verified_rate：{summary.get('verified_rate')}",
+        f"- llm_error_count：{summary.get('llm_error_count')}",
         f"- 工具选择准确率：{summary.get('tool_selection_accuracy')}",
         "",
         "## 分类通过率",
@@ -252,7 +261,7 @@ def write_report(summary: dict, results: list[dict], system_prompt: str) -> None
         lines += ["", "工具选择和引用支持均以全部题目为分母。空期望工具按无交集计分。",
                   "引用支持率检查答案是否含成功工具的 source 路径；不代表全文语义核验。",
                   "", "## 验证状态", ""]
-        lines += [f"- {r['id']}: verified={r.get('verified', False)}" for r in results]
+        lines += [f"- {r['id']}: verified={r.get('verified', False)}；{r.get('verification_error') or '通过校验'}" for r in results]
     (EVAL_DIR / f"report{suffix}.md").write_text("\n".join(lines), encoding="utf-8")
 
     detail = ["# 逐题作答明细", ""]

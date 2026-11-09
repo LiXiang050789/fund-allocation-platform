@@ -27,10 +27,17 @@ def named_sources(query, chunks, *, explicit=False) -> list[str]:
         # A short TXT heading is also its title (e.g. 一、债券).
         if name.endswith('.txt'):
             title = re.sub(r'^[一二三四五六七八九十\d]+[、.．]\s*', '', chunk['section'].split(' / ')[0])
-            if 2 <= len(title) <= 12:
+            if 2 <= len(title) <= 12 and title not in {'正文', '概述', '说明', '附录'}:
                 aliases.add(title)
         if explicit:
             aliases.discard('手册')
         if any(key(alias) in query for alias in aliases if alias):
             found.append(name)
     return found
+
+
+def corpus_sources():
+    """Names only: verification does not load corpus bodies or embeddings."""
+    from .ingest import load_corpus
+    return [{'source_name': Path(entry['path']).name, 'section': ''}
+            for entry in load_corpus(Path(__file__).with_name('corpus.yaml'))]

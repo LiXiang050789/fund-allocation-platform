@@ -8,6 +8,8 @@ from pydantic import BaseModel, field_validator
 
 from app.config import settings
 from app.graph import graph
+from app.rag.index import validate, REBUILD
+from app.rag.retriever import CORPUS_PATH
 from app.tools.registry import TOOL_SCHEMAS
 
 logging.basicConfig(level=settings.log_level)
@@ -44,7 +46,24 @@ def chat(request: ChatRequest):
 
 @app.get("/healthz")
 def healthz():
-    return dict(status="ok", model=settings.deepseek_model, rag_enabled=True, vector_rag_enabled=settings.enable_vector_rag)
+    backend, error, error_type = None, None, None
+    try:
+        manifest = validate(settings.platform_dir.parent, CORPUS_PATH, settings.index_dir)
+        backend = manifest['backend'] if settings.enable_vector_rag else 'bm25'
+    except Exception as exc:
+        error_type = type(exc).__name__
+        # Only expose known operational diagnostics; never arbitrary exception text.
+        message = str(exc)
+        if isinstance(exc, ValueError) and message.startswith(('语料缺失:', '索引缺失', '索引过期')):
+            category = '语料缺失，请补齐 corpus.yaml 中的语料' if message.startswith('语料缺失:') else ('索引缺失' if message.startswith('索引缺失') else '索引过期')
+            error = f'{category}，请重建：{REBUILD}'
+        else:
+            error = f'索引检查失败，请重建：{REBUILD}'
+    enabled = error is None
+    log.info('rag_enabled=%s rag_backend=%s rag_error=%s', enabled, backend, error_type)
+    return dict(status='ok' if enabled else 'degraded', model=settings.deepseek_model,
+                rag_enabled=enabled, vector_rag_enabled=settings.enable_vector_rag,
+                rag_backend=backend, rag_error=error)
 
 
 @app.get("/tools")

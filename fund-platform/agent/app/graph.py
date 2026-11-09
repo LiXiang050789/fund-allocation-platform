@@ -16,7 +16,8 @@ from app.tools import registry
 from app.rag.citations import (DOC_REF, citation, citation_matches, document_text,
                                marked_numbers, retrieved_chunks)
 
-from app.rag.named import named_sources
+from app.rag.named import named_sources, corpus_sources
+from app.rag.textnorm import normalize_text, numeric_text
 
 log = logging.getLogger(__name__)
 
@@ -120,6 +121,23 @@ def router(state):
         events.append({"stage": "router", "status": "error", "error": type(exc).__name__})
         log.warning("router LLM failed: %s", type(exc).__name__)
         calls = fallback_calls(state["question"])
+    # Numeric-only questions must use their data tool rather than document prose.
+    expected_data = data_fallback_calls(state['question'])
+    if expected_data and not document_question(state['question']) and not refusal(state['question']):
+        calls = [c for c in calls if c.get('name') != 'search_docs']
+        for expected in expected_data:
+            if not any(c.get('name') == expected['name'] for c in calls):
+                calls.append(expected)
+    # Preserve explicitly requested files when the model rewrites a search query.
+    catalog = corpus_sources()
+    requested = named_sources(state['question'], catalog, explicit=True)
+    for call in calls:
+        if call.get('name') == 'search_docs':
+            args = dict(call.get('args', {}))
+            query = args.get('query', '')
+            if isinstance(query, str) and any(name not in named_sources(query, catalog, explicit=True) for name in requested):
+                args['query'] = (state['question'] + ' ' + query)[:200]
+                call['args'] = args
     return dict(pending=[{"name": c["name"], "args": c.get("args", {})} for c in calls[:8]],
                 route=state["route"] + [c["name"] for c in calls[:8]], rounds=state["rounds"]+1, llm_events=events)
 
@@ -171,7 +189,7 @@ def evidence_answer(question, results):
                 clauses = re.split(r"(?<=[。；])|\n", text)
                 excerpt = ""
                 for clause in clauses:
-                    clause = clause.strip()
+                    clause = clause.strip().lstrip("①②③④⑤⑥⑦⑧⑨⑩").strip()
                     if clause and not marked_numbers(clause)[1] and len(excerpt+clause) <= 130:
                         excerpt += clause
                 parts.append((excerpt or "文档依据不足，当前数据无法回答。") + citation(chunk))
@@ -212,7 +230,7 @@ def compose(state):
         sources.sort(key=lambda source: source != primary)
     answer = evidence_answer(state["question"], usable)
     if refusal(state["question"]):
-        answer = POLICY
+        answer = POLICY + (evidence_answer(state["question"], [r for r in usable if r["tool"] == "search_docs"]) if docs else "")
     elif usable:
         try:
             evidence = []
@@ -224,7 +242,7 @@ def compose(state):
                 else:
                     evidence.append(result)
             response = get_llm().invoke([
-                SystemMessage(content="只用提供的tool_results回答，数字只能来自证据。中文简洁回答，正文不超过140字；引用和免责声明也计入总长300字。仅回答市场评分分项时使用估值/宏观/情绪/趋势标签。其他问题保留原主题名称，不强加评分标签。累计收益、年化收益、最大回撤、年化波动等比例字段，原始小数乘100写成百分比，保留两位小数，避免一位小数损失原始精度；夏普/卡玛/索提诺保留比率原值。市场评分和分项使用分制；交易日、维度/列数、天数、排名使用计数单位，均不得加百分号。问题点名某文档时，先回答该文档的内容，不得用另一文档替代；若与权威手册或最终代码不一致，须用一句话说明差异并明确“最终以代码为准”。文档解释至少逐字复制一条chunk的citation，不得编造引用；多个来源优先引用被点名文档，涉及最终代码差异时也引用最终代码依据；选择直接支持答案的章节。文档中的数字仅authoritative可用，background/historical只解释背景，不得引用其事实数字。旧值/禁用清单只可标为旧值，不得作为当前事实。涉及数据口径时说明实际数据以数据工具为准。发现文档算术矛盾时仅说明矛盾并照录原值，不得计算或写出证据没有的合计数。不提供个性化投资建议。"),
+                SystemMessage(content="只用提供的tool_results回答，数字只能来自证据。中文简洁回答，正文不超过140字；引用和免责声明也计入总长300字。直接列短语，省略重复题目和文档全名。解释设计稿与最终代码差异时，须压缩保留证据中的全部关键差异（正向基准、惩罚项、附加奖励、裁剪），不得只列前三项。引用单独放末尾，不在正文重复免责声明。仅回答市场评分分项时使用估值/宏观/情绪/趋势标签。其他问题保留原主题名称，不强加评分标签。累计收益、年化收益、最大回撤、年化波动等比例字段，原始小数乘100写成百分比，保留两位小数，避免一位小数损失原始精度；夏普/卡玛/索提诺保留比率原值。市场评分和分项使用分制；交易日、维度/列数、天数、排名使用计数单位，均不得加百分号。问题点名某文档时，先回答该文档的内容，不得用另一文档替代；若与权威手册或最终代码不一致，须用一句话说明差异并明确“最终以代码为准”。文档解释至少逐字复制一条chunk的citation字段，包括文件名、章节、空格和方括号，不得自行改写、拼接或使用text内的旧引用，不得编造引用；混合问题即使已有数据工具的[source:]，也必须引用chunk的citation，不能用数据引用替代文档引用。多个来源优先引用被点名文档，涉及最终代码差异时也引用最终代码依据；选择直接支持答案的章节。文档中的数字仅authoritative可用，background/historical只解释背景，不得引用其事实数字。旧值/禁用清单只可标为旧值，不得作为当前事实。涉及数据口径时说明实际数据以数据工具为准。公式优先逐字照录权威原文，系数保留原文小数位，不能省略零系数或成本说明。发现文档算术矛盾时仅说明矛盾并照录原值，不得计算或写出证据没有的合计数。不提供个性化投资建议。"),
                 HumanMessage(content=json.dumps({"question": state["question"], "tool_results": evidence,
                                                  "correction": state.get("correction", "")}, ensure_ascii=False))])
             events.append({"stage": "compose", "status": "success"})
@@ -235,10 +253,23 @@ def compose(state):
             log.warning("compose LLM failed: %s", type(exc).__name__)
     if "北向" in state["question"] and any(r["tool"] == "get_data_caveats" for r in usable) and "北向" not in answer:
         answer = "北向资金：" + answer
+    # Preserve the requested identity of structured rows, including tiers and crises.
+    question_key = re.sub(r"\s+", "", state['question']).casefold()
+    labels = list(dict.fromkeys(str(row.get(key) or '')
+                  for result in data_results for row in result['data'].get('rows', [])
+                  for key in ('风险档', '危机阶段', '阶段', '策略', '策略源')))
+    requested_labels = []
+    for label in labels:
+        key = re.sub(r"\s+", "", label).casefold()
+        identifiers = re.findall(r'[a-z]+\d+|(?:19|20)\d{2}', key)
+        if key and (key in question_key or any(token in question_key for token in identifiers)):
+            requested_labels.append(label)
+    answer_key = re.sub(r"\s+", "", answer).casefold()
+    missing_labels = [label for label in requested_labels if re.sub(r"\s+", "", label).casefold() not in answer_key]
+    if missing_labels:
+        answer = '、'.join(missing_labels) + '：' + answer
     matched, _ = citation_matches(answer, docs)
     doc_references = list(dict.fromkeys(citation(c) for c in matched))
-    if docs and not doc_references:
-        doc_references = [citation(docs[0])]
     # Move citations to a reserved footer so length limiting cannot remove half a citation.
     body = DOC_REF.sub("", answer)
     body = re.sub(r"\[source:.*?\]", "", body, flags=re.S).strip()
@@ -276,18 +307,20 @@ def numeric_values(value):
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return [float(value)]
     if isinstance(value, str):
-        text = strip_dates(value)
+        text = numeric_text(strip_dates(value))
         text = re.sub(r"(?<=\d)[-–—](?=\d)", " 至 ", text)
         return [float(n) for n in re.findall(r"-?\d+(?:\.\d+)?", text)]
     return []
 
 
 def strip_dates(text):
+    text = normalize_text(text)
     text = re.sub(r"\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{4}年\d{1,2}月\d{1,2}日", "", text)
     return re.sub(r"(?<!\d)(?:19|20)\d{2}年?(?!\d)", "", text)
 
 
 def score_unit_error(body, results):
+    body = normalize_text(body)
     if not any(r.get("ok") and r.get("tool") == "get_market_score" for r in results):
         return False
     return bool(re.search(
@@ -310,8 +343,8 @@ def verify(state):
     values += numeric_values([c["text"] for c in docs if c["authority"] == "authoritative"])
     obsolete_allowed, obsolete_violations = marked_numbers(body)
     values += obsolete_allowed
-    needs_reference = bool(docs) and "当前数据无法回答" not in body
-    missing_named = [name for name in named_sources(state['question'], docs, explicit=True)
+    needs_reference = bool(docs)
+    missing_named = [name for name in named_sources(state['question'], docs + corpus_sources(), explicit=True)
                      if not any(c['source_name'] == name for c in matched)]
     reference_valid = not invalid_refs and not missing_named and (not needs_reference or bool(matched))
     allowed = {0, 1, 2, 3, 5, 7, 10, 100}
@@ -333,6 +366,11 @@ def verify(state):
 
 
 def finalize(state):
+    docs = retrieved_chunks(state.get('tool_results', []))
+    matched, invalid = citation_matches(state.get('answer', ''), docs)
+    if docs and not state.get('verified') and (not matched or invalid):
+        return dict(answer='未在检索片段中找到可引用依据，无法回答。不构成投资建议。',
+                    citations=[], verified=False)
     return state
 
 

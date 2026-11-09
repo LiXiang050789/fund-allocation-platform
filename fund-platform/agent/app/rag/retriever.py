@@ -81,8 +81,9 @@ def search(query, top_k=5, *, root=None, corpus_path=None, index_dir=None, vecto
     reserved = []
     protected = set()
     neighbors = []
-    for name in named[:top_k]:
-        existing = next((i for i, c in enumerate(found) if c['source_name'] == name), None)
+    for number, name in enumerate(named[:top_k]):
+        slot_limit = min(5, top_k) if number < 5 else top_k
+        existing = next((i for i, c in enumerate(found[:slot_limit]) if c['source_name'] == name), None)
         if existing is not None:
             # Expand adjacent chunks in corpus order, then rank this local window.
             # This retains a named source while recovering paragraphs split at headings.
@@ -103,11 +104,11 @@ def search(query, top_k=5, *, root=None, corpus_path=None, index_dir=None, vecto
         else:
             best = min(pool, key=lambda i: (-sum(t in chunks[i]['text'] for t in query_tokens), i))
         item = {**chunks[best], 'score': float(scores[best])}
-        if len(found) < top_k:
+        if len(found) < slot_limit:
             slot = len(found)
             found.append(item)
         else:
-            slot = next((i for i in reversed(range(len(found))) if i not in protected), None)
+            slot = next((i for i in reversed(range(min(len(found), slot_limit))) if i not in protected), None)
             if slot is None:
                 break
             found[slot] = item
