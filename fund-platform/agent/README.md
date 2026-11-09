@@ -4,7 +4,7 @@
 
 已完成 PPO 权威语料、16 题文档评测、命名检索、Unicode 数值处理、真实 healthz、引用 fail-closed 与语料预检。最终真实评测时间：2026-11-09T20:37:03+08:00。
 阶段施工书见 [`../../AI-Agent施工书-2026-11-07.md`](../../AI-Agent施工书-2026-11-07.md)。该施工书为本地文件，不纳入本次提交。
-Phase 3 简报审核推送、Phase 4 平台集成未开始。
+Phase 3 简报审核推送的实现与验收见本文末尾；Phase 4 平台集成未开始。
 
 ## 环境与配置
 
@@ -175,3 +175,79 @@ HTTP：Q14 包含市场、持仓、净值，并引用强化学习.txt 的正确�
 - 两份根目录本地专用语料仍需 fresh clone 手工补齐，预检保持 fail-closed。
 
 本轮未改弱既有断言，只新增6项参数化回归/报告测试。仅修改 agent/；保留原有四项未跟踪内容，不提交密钥、索引、模型缓存或忽略的手册。未 push。
+
+
+## Phase 3：简报工作流与人工审核（2026-11-09）
+
+已完成：132项离线测试、真实服务重启恢复、报告落盘与一次飞书发布验收。重复approve返回duplicate=true，没有重复发群；详见 [真实证据](eval/phase3_evidence.md)。
+
+### 状态机与数据
+
+```text
+collect -> score -> models -> risk -> draft -> human_review (interrupt)
+                                               | approve -> publish -> END
+                                               | edit -> human_review (再次中断)
+                                               | reject(前两次) -> draft -> human_review
+                                               | reject(第三次) -> rejected -> END
+```
+
+collect调用现有市场与口径工具，report_date取市场as_of。models取十策略与三模型摘要，risk取三段压力测试和动态评分C2/C3/C4摘要；任何必需工具失败都返回failed，不发布。可选PPO权重缓存不可读时写“无权重缓存”。draft采用固定Markdown模板，不用LLM生成事实或数字。
+报告包含市场评分、十策略排名、风险提示、模型观点、数据备注、免责声明、审核状态七节。比例保留两位小数，评分用分制。人工编辑不自动验证数字；审核人须检查修改后的事实与口径。
+
+使用真实 SqliteSaver：`data/checkpoints.sqlite`。生产图使用root-dict状态，避免risk/draft节点与同名状态字段冲突；Command显式更新root通道，interrupt通过Command(resume=...)恢复。未用内存字典保存审核状态。
+仅支持单进程uvicorn；服务内RLock串行化读写和审核。多进程部署与跨实例锁不在本轮范围。服务退出时关闭SQLite连接；重启后graph.get_state读取同一thread。
+
+### 接口
+
+| API | 行为 |
+|---|---|
+| `POST /workflow/run` | 无请求体；创建安全随机thread_id，生成草稿并返回awaiting_review；必需数据/渲染失败返回200+failed |
+| `GET /workflow/{thread_id}` | 读取持久状态、草稿、审核历史、路径/hash和发布结果；未知404 |
+| `POST /workflow/{thread_id}/approve` | 严格JSON：action、reviewer、comment、edited_markdown；额外字段422 |
+| `GET /workflow/{thread_id}/report` | 当前草稿或已保存报告；text/markdown UTF-8；未知404、无草稿409 |
+
+审核体示例：
+
+```json
+{"action":"approve","reviewer":"LiXiang","comment":"同意发布","edited_markdown":""}
+```
+
+reviewer去空白后1–80字。edit必须非空edited_markdown，上限50000字；保留正文空白，revision+1，返回待审，不自动发布。reject必须非空comment，上限1000字；前两次固定模板重新渲染并保留意见，连续第三次rejected；edit重置连续驳回计数。approve记录审核人及本地时区ISO时间，并进入publish。
+
+| status | 含义 |
+|---|---|
+| awaiting_review | 草稿待审 |
+| published | 报告保存且通知成功；应用机器人message_id非空 |
+| saved_only | 没有飞书配置，仅保存报告 |
+| publish_failed | 报告保存，配置存在但三次通知均失败 |
+| rejected | 连续三次驳回，无最终报告、无通知 |
+| failed | 必需工具/渲染/保存失败，无成功发布 |
+
+published/saved_only重复approve返回duplicate=true，不发群；这两种状态的edit/reject返回409。publish_failed再次approve只重试发布，复用路径、数据与同一幂等键；仅刷新最终审核状态和审核记录，不重新采集/生成数据报告。rejected/failed返回409。业务失败为200+明确status。
+
+### 保存与飞书
+
+先以UTF-8临时文件+原子替换保存 `reports/<report_date>_<thread_id>.md`，再发送卡片；通知失败保留报告。结果回写最终第七节与SHA256。reports目录和checkpoint DB不入Git。
+复用build_brief_card/notify/send_card，原CLI行为不变。优先应用机器人，无应用凭证时用已配置Webhook；两者都没有为saved_only。只有应用凭证但缺少群ID属于配置错误，会publish_failed，不冒充saved_only。
+最多3次逻辑发送尝试；同一 `brief-<report_date>-<thread_id>` 截取50字的幂等键传给send_card。成功应用消息缺少message_id也按失败重试。日志只记尝试次数、异常类型、节点、线程和耗时，不记录凭证或完整chat_id。配置对象repr隐藏敏感字段。
+应用机器人UUID与本地终态检查共同防重。Webhook没有服务端UUID去重或通常没有message_id，网络超时后的重复投递无法作同等保证；本轮真实验收要求应用机器人message_id，且只允许已授权测试群的一条卡片。
+
+`.env.example` 新增 `REPORT_URL_BASE=http://localhost:8001`。卡片链接为该base加 `/workflow/{thread_id}/report`。手机或外网通常无法访问本机localhost；需配置可达的本机局域网地址或受控服务地址。审核API无认证，仅供受信本地环境；公网部署和鉴权不在本轮范围。
+
+### 验证与限制
+
+```bash
+.venv/bin/python -c "from langgraph.checkpoint.sqlite import SqliteSaver; print('sqlite_ok')"
+uv pip check --python .venv/bin/python
+.venv/bin/python -m pytest -q
+.venv/bin/python -m app.rag.build_index --check-corpus
+.venv/bin/python -m app.rag.build_index --check-golden
+.venv/bin/python eval/run_eval.py --mode agent
+```
+
+本轮：sqlite_ok；依赖兼容；132 passed；corpus_ok=9；golden_quotes=16/16；25题25/25、工具选择0.96、引用支持1.0、verified1.0、模型错误0。现有/chat、/healthz、/tools行为保留，工具仍9个；不改RAG、chat路由或golden。六份原eval修改保留未提交。
+SQLite真实服务重启前后同一待审草稿一致；草稿GET、市场33.90/下行/verified=true、tools9、空问题422均通过。真实飞书发布与重复approve通过：唯一授权群为小波❤小蛙，message_id=`om_x100b602a4e9568a0cf21d724d71dae1`，发布状态published；发送尝试1次、duplicate=true；报告hash与下载内容一致。用户明确授权后才配置目标并发送，未向其他群发卡。
+
+[运行证据](eval/phase3_evidence.md)记录真实thread、重启状态、草稿/报告hash和真实发布结果；[Phase3 Quiz](eval/phase3_quiz.md)含8题，仅题目。截图未获取。消息原生create_time未获取，发送时间记录发布完成checkpoint时间。服务关闭；未push。
+
+本次真实线程：`d5d133fed32d4961b3618c59f6a888db`；报告：`reports/2026-07-10_d5d133fed32d4961b3618c59f6a888db.md`；SHA256：`033c82af49f452e0e52840d4df097932799710908d6d5300f2dc63b79269f5e3`。`.env`按用户授权写入目标且权限600，不提交。
