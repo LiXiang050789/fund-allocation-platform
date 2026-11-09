@@ -74,7 +74,8 @@ def write_reports(summary, results):
     lines += ['', 'Recall@5 按固定全部16题统计。引用指标要求至少一个真实引用，且全部引用可映射。',
               'keyword_coverage 按所有期望关键词统计。数字与关键词明细记录在 results_doc.json 的 fails。',
               '引用只校验片段存在，不保证语义完备。background/historical 的数字不作为当前事实依据。',
-              'Q14 若 Recall 为 0，表示 golden 锚定片段未进入前五，不改动原文锚点。',
+              ('Q14 Recall@5=0：golden 锚定 artifact，指定原文片段未进入前五；保留原 source_quote。'
+               if any(r['id'] == 'Q14' and not r['recall_at_5'] for r in results) else 'Q14 原文片段进入前五；保留原 source_quote。'),
               '', '| ID | Recall@5 | 引用合法 | 期望来源 | verified | 关键词 | 失败项 |',
               '|---|---|---|---|---|---|---|']
     for r in results:
@@ -85,7 +86,7 @@ def write_reports(summary, results):
     for r in results:
         detail += [f"## {r['id']}", '', f"问题：{r['question']}", '', '回答：', r['answer'], '',
                    f"原文引用：{r['source_quote']}", '', f"来源：{r['source']}", '',
-                   '原文答案（逐字摘录）：', r['golden_answer'], '', f"原文矛盾/口径：{r['caveat'] or '无额外注记'}", '']
+                   '期望答案（评测说明）：', r['golden_answer'], '', f"原文矛盾/口径：{r['caveat'] or '无额外注记'}", '']
     (EVAL_DIR/'answers_doc.md').write_text('\n'.join(line.rstrip() for line in '\n'.join(detail).splitlines())+'\n', encoding='utf-8')
 
 

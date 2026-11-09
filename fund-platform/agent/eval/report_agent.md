@@ -2,13 +2,15 @@
 
 - 模式：`agent`
 - 执行方式：`configured_llm`
-- 时间：2026-11-08T23:54:22
+- 时间：2026-11-09T13:51:38
 - 总题数：25
 - 通过：25
 - 准确率：100.0%
 - 引用支持率：1.0（按全部题目统计成功工具 source 路径的引用）
-- 延迟 p50/p95：3.78s / 10.6s
+- 延迟 p50/p95：4.76s / 7.35s
 
+- verified_rate：1.0
+- llm_error_count：0
 - 工具选择准确率：0.96
 
 ## 分类通过率
@@ -62,28 +64,28 @@
 
 ## 验证状态
 
-- M01: verified=True
-- M02: verified=True
-- M03: verified=True
-- M04: verified=True
-- M05: verified=True
-- S01: verified=True
-- S02: verified=True
-- S03: verified=True
-- S04: verified=True
-- S05: verified=True
-- S06: verified=True
-- G01: verified=True
-- G02: verified=True
-- G03: verified=False
-- G04: verified=True
-- G05: verified=True
-- R01: verified=True
-- R02: verified=True
-- R03: verified=True
-- D01: verified=True
-- D02: verified=True
-- D03: verified=True
-- X01: verified=True
-- X02: verified=True
-- X03: verified=True
+- M01: verified=True；通过校验
+- M02: verified=True；通过校验
+- M03: verified=True；通过校验
+- M04: verified=True；通过校验
+- M05: verified=True；通过校验
+- S01: verified=True；通过校验
+- S02: verified=True；通过校验
+- S03: verified=True；通过校验
+- S04: verified=True；通过校验
+- S05: verified=True；通过校验
+- S06: verified=True；通过校验
+- G01: verified=True；通过校验
+- G02: verified=True；通过校验
+- G03: verified=True；通过校验
+- G04: verified=True；通过校验
+- G05: verified=True；通过校验
+- R01: verified=True；通过校验
+- R02: verified=True；通过校验
+- R03: verified=True；通过校验
+- D01: verified=True；通过校验
+- D02: verified=True；通过校验
+- D03: verified=True；通过校验
+- X01: verified=True；通过校验
+- X02: verified=True；通过校验
+- X03: verified=True；通过校验

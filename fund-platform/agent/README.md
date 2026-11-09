@@ -1,151 +1,50 @@
 # 投研 AI Agent（LangGraph + RAG）
 
-工行杯平台的问答 Agent 与投研简报工作流。设计与阶段计划见
-[`../../AI-Agent施工书-2026-11-07.md`](../../AI-Agent施工书-2026-11-07.md)。
+## Phase 2.1（2026-11-09）
 
-## 当前状态
+已完成 PPO 权威语料、16 题文档评测、命名检索、Unicode 数值处理、真实 healthz、引用 fail-closed 与语料预检。最终真实评测时间：2026-11-09T13:47:49+08:00。
+阶段施工书见 [`../../AI-Agent施工书-2026-11-07.md`](../../AI-Agent施工书-2026-11-07.md)。该施工书为本地文件，不纳入本次提交。
+Phase 3 简报审核推送、Phase 4 平台集成未开始。
 
-| 阶段 | 状态 | 说明 |
-|---|---|---|
-| Phase 0 | 已完成 | 独立环境、25 题评测集、基线评测、飞书发卡实测 |
-| Phase 1 | 已完成 | 8 个只读工具、LangGraph、`/chat`、30 项单测；真实模型评测 25/25 |
-| Phase 2 | 已完成 | docx/md/txt、BM25 + FAISS、search_docs、引用与数字校验；验收见下文 |
-| Phase 3 | 未开始 | 简报工作流 + 人工审核 + 飞书推送 |
-| Phase 4 | 未开始 | 平台集成 + 本地部署 |
+## 环境与配置
 
-## 环境
-
-- Python 3.12，独立 venv：`.venv/`
-- 核心依赖：`requirements.in` → 编译为 `requirements.txt`
-- RAG 重型依赖单独放 `requirements-rag.in`（Phase 2 再装）
+使用 Python 3.12 和独立 `.venv/`。在本目录执行：
 
 ```bash
 uv venv --python 3.12 .venv
 uv pip install -r requirements.txt --python .venv/bin/python
 uv pip install -r requirements-dev.txt --python .venv/bin/python
+UV_TORCH_BACKEND=cpu uv pip install -r requirements-rag.txt --python .venv/bin/python
+cp .env.example .env
+chmod 600 .env
 ```
 
-## 配置
+填写配置的模型服务密钥；不得提交 `.env`。真实模型运行会把问题及工具结果（包括检索片段）发送到配置的 DeepSeek 服务。本轮执行有用户明确授权。
 
-```bash
-cp .env.example .env    # 填入 DeepSeek Key、飞书 App ID/Secret
-chmod 600 .env          # .env 已在 .gitignore，不提交
-```
-
-代码只从环境变量读取密钥，不写死、不进镜像。
-
-## 评测
-
-```bash
-.venv/bin/python eval/run_eval.py --mode baseline
-```
-
-产物：
-
-- `eval/results.json`：机器可读结果与 system prompt 原文
-- `eval/report.md`：汇总报告
-- `eval/answers.md`：逐题作答明细
-
-基线结果：25 题通过 6 题（24%）；通过项为当前市场评分/状态与合规拒答。
-
-## 飞书自检
-
-```bash
-.venv/bin/python -m app.feishu --list                      # 列出机器人所在群
-.venv/bin/python -m app.feishu --send --chat-name "群名"    # 发一张测试卡片
-```
-
-通道优先级：自建应用机器人 → 群自定义机器人 Webhook → 抛错。
-
-## 待办
-
-- 平台 `platform/app.py` 的 AI 助手 tab 改为调用 Agent 服务（Phase 4）
-
-## Phase 1（2026-11-08）
-
-启动（在 `fund-platform/agent` 目录）：
+## 接口与问答图
 
 ```bash
 .venv/bin/uvicorn app.main:app --port 8001
+curl -s localhost:8001/healthz
+curl -s localhost:8001/tools
 curl -s -X POST localhost:8001/chat -H 'Content-Type: application/json' \
-  -d '{"question":"最新市场评分和状态","thread_id":"demo"}'
+  -d '{"question":"最新市场评分和状态"}'
 ```
 
-接口：`POST /chat`、`GET /healthz`、`GET /tools`。
-空白问题返回 422。内部错误返回 200 与 `verified=false`。
-`thread_id` 用于请求标识；本阶段不保存对话记忆。
-Phase 1 验收时 `rag_enabled=false`；Phase 2 当前行为见下文。
+`POST /chat` 返回 answer、tool_calls、citations、verified、latency_ms、thread_id。空白问题返回 HTTP 422。内部异常返回 HTTP 200 和 `verified=false`。thread_id 标识请求，不持久化对话记忆。
 
-图：`intake → router → tools → compose → verify → finalize`。
-工具失败时最多再路由一轮；数字或合规校验失败时最多再生成一次。
-模型异常、无工具调用或工具名不在白名单时，路由使用确定性关键词回退。
-回答只引用成功工具的证据。`verified` 只表示数字、拒答和长度检查通过，不表示全文语义正确。
-模型无法连接时，回答从工具结果生成。
+`intake → router → tools → compose → verify → finalize`。工具全部失败时最多再路由一轮。回答校验失败时最多再生成一次。模型异常时，从成功工具证据生成确定性摘要。
 
-工具清单：
+9 个工具均只读：get_market_score、get_market_state_summary、get_strategy_metrics、get_segment_performance、get_drawdown_recovery、get_risk_tier、get_feature_importance、get_data_caveats、search_docs。
+`search_docs(query, top_k=5)` 的 query 为 1–200 字，top_k 为 1–10；严格类型校验，拒绝额外参数和外部文件路径。
+规则、设计、问卷与费率问题检索文档；实际指标读取数据工具；混合问题同时查询。
 
-- `get_market_score`：最新或指定日期评分。
-- `get_market_state_summary`：五态交易日统计。
-- `get_strategy_metrics`：十套策略的全区间指标。
-- `get_segment_performance`：六阶段、十套策略表现。
-- `get_drawdown_recovery`：危机回撤和修复天数。
-- `get_risk_tier`：风险档与策略指标。
-- `get_feature_importance`：特征重要性排序。
-- `get_data_caveats`：数据覆盖、北向缺口、宏观滞后和维度。
+`/healthz` 每次调用 validate，检查真实语料、清单与索引哈希，不加载 embedding。
+成功返回 `status=ok`、`rag_enabled=true`、`rag_backend` 和 `rag_error=null`。
+缺失或过期返回 HTTP 200、`status=degraded`、`rag_enabled=false`、`rag_backend=null`；rag_error 提供重建命令，不暴露任意异常内容。
+`vector_rag_enabled` 表示向量开关。开关关闭时仍可使用 BM25。
 
-所有工具只读。输入校验禁止额外参数和任意文件路径。
-表格缓存按路径、修改时间与大小失效。北向只读取日期和资金列。
-`MACRO_LAG` 从源码解析，解析失败返回错误。
-
-验证命令：
-
-```bash
-.venv/bin/python -m pytest -q
-.venv/bin/python eval/run_eval.py --mode agent --offline
-# 真实模型评测会发送题目及工具聚合结果至配置的模型服务：
-.venv/bin/python eval/run_eval.py --mode agent
-```
-
-2026-11-08 验证结果：
-
-- 单测：`30 passed, 1 warning in 3.12s`。全部 mock LLM，无真实网络。
-- 离线 Agent 评测：25/25（100%）；工具选择准确率 92%；引用支持率 96%。
-- 真实模型 Agent 评测：25/25（100%）；工具选择准确率 92%；引用支持率 100%。
-- 真实模型延迟 p50/p95：3.48s / 4.39s。
-- 原基线：6/25（24%）。离线结果单独记录，不代表真实模型表现。
-- 真实模型 25 题的 `verified` 均为 true，最长回答 152 字（含引用）。
-- 8001 端口后台启动和 curl：评分 33.9、状态「下行」、`verified=true`。
-- 空问题 curl：HTTP 422。
-- 缺失评分文件：工具 `ok=false`，HTTP 200；原始数据未改动。
-- 初次 HTTP 验收禁用模型外呼。授权后的真实模型 curl 同样返回评分 33.90、状态「下行」、`verified=true`；验收后关闭服务。
-- `grep -rnE '33\.9|13\.13|0\.646' app/` 无命中。
-- LangGraph 依赖有一项未来默认值变更警告；未改动依赖版本。
-
-产物：`eval/results_agent.json`、`eval/report_agent.md`、`eval/answers_agent.md`。
-基线产物和 `golden_set.yaml` 保持原样。
-工具选择和引用支持均以全部 25 题为分母。
-X01 期望的 `search_docs` 属于 Phase 2，不实现。
-X02 的期望工具为空，按“与期望有交集”规则记为未命中。
-引用支持率仅检查成功工具 source 路径是否出现在回答中，不代表语义判定。
-
-真实模型评测由用户授权后执行。首次联网评测为 24/25，北向题因评分标签误用而缺少主题关键词。提示词改为仅对市场分项使用评分标签；数据口径引用按问题主题选择主来源。修正后完整联网评测 25/25。
-限制：`verified` 只检查数字、拒答和长度；引用支持指标只检查路径出现，不覆盖完整语义。
-工作区原有 4 项 agent 目录外的未跟踪内容，本次保留，未纳入提交。
-
-## Phase 1.1 与 Phase 2（2026-11-09）
-
-### 当前行为
-
-- 共 9 个只读工具，第 9 个为 `search_docs(query, top_k=5)`。
-- `query` 为 1–200 字，`top_k` 为 1–10，严格类型校验，拒绝额外参数。
-- 规则/定义/问卷/费率/PPO设计/防前视解释检索文档；具体日期与指标读取数据工具；混合问题同时查询。
-- 数据引用：`[source: 路径]`；文档引用：`[来源: 文件名 §章节]`。
-- `/healthz` 返回 `rag_enabled=true`，另有 `vector_rag_enabled` 表示向量开关。
-- 市场评分和分项使用分制；计数使用原单位；比例字段按百分数保留两位小数。
-- verify 拦截评分/分项百分号，保留合法收益和回撤百分比。
-- 自然阶段名接受“2021年后震荡期”与“2015年股灾期间”，未知阶段仍返回错误。
-
-### 语料清单与权限
+## 语料与权威级别
 
 路径相对仓库根目录：
 
@@ -159,131 +58,115 @@ X02 的期望工具为空，按“与期望有交集”规则记为未命中。
 | `fund-platform/docs/已有信息下ETF实际费率与5bp的对比(1).docx` | authoritative |
 | `fund-platform/docs/强化学习.txt` | background |
 | `项目书修订说明.md` | historical |
+| `fund-platform/docs/PPO奖励口径-最终代码.md` | authoritative |
 
-- `authoritative`：用于规则解释，文本中的数字可以作为依据。
-- `background`：只解释设计背景，事实数字不作为答案依据。
-- `historical`：只解释历史背景。只有明确标记的禁用旧值可以作为旧值说明。
-- `doc_date` 优先使用文件最近一次 Git 提交日期；无记录时使用 mtime。
-- `golden_answer` 与 `source_quote` 来自解析原文摘录，不由模型改写。
+authoritative 文本可提供数字依据。background/historical 只解释背景，不提供当前事实数字。禁用旧值只有明确标记时才能作为旧值解释。
+PPO 最终奖励以新增文档及 env_16.py / H_equity_residual 配置为准；早期《强化学习.txt》保留为 background。
+Q15 先回答设计稿的收益奖励与三类惩罚，再披露最终实现的差异；Q16 回答最终公式、系数、交易成本与 clip。Q15 原 source_quote 和 Q14 原锚点未改动。
+文档中的逐字引用由 source_quote 定位；golden_answer 为评测期望说明，不声称全文逐字摘录。
 
-### 安装与构建
+`项目彻底理解手册-答辩备战版.md`、`项目书修订说明.md` 被根 `.gitignore` 忽略，是本地专用语料。
+fresh clone 必须先把这两个文件放到仓库根目录，否则预检和构建会 fail-closed。
+不得 `git add -f` 这两个文件；不得修改根 `.gitignore` 规避检查。
+新增 `fund-platform/docs/PPO奖励口径-最终代码.md` 已入库，保证最终奖励口径可复现。
 
-在 `fund-platform/agent` 目录执行。CPU 版 torch 的编译与安装均指定 `UV_TORCH_BACKEND=cpu`：
+## 构建与缺失前置
 
 ```bash
-UV_TORCH_BACKEND=cpu uv pip compile requirements-rag.in -o requirements-rag.txt
-UV_TORCH_BACKEND=cpu uv pip install -r requirements-rag.txt --python .venv/bin/python
+.venv/bin/python -m app.rag.build_index --check-corpus
 .venv/bin/python -m app.rag.build_index
 .venv/bin/python -m app.rag.build_index --check-golden
 ```
 
-核心 `requirements.txt` 不变；RAG 锁文件约束核心依赖。
-Embedding 使用 `BAAI/bge-small-zh-v1.5`，CPU 本地编码、L2 归一化、FAISS 内积索引。
-BM25 使用 jieba 分词；结果按 `sum(1/(60+rank))` 做 RRF 融合。
-本次 BGE 下载成功，未使用镜像。
+预检成功输出 `corpus_ok=9`；缺失时输出全部 missing 路径和补齐/移除建议，退出码 1。构建在计算 digest 前检查全部文件，不静默跳过。
+validate 区分“索引缺失”“语料缺失”和“索引过期”。每次检索检查完整性，拒绝使用过期内容。
 
-直连下载失败时，可以尝试：
+本轮索引：`documents=9 chunks=124 backend=hybrid`。
+索引目录 `data/index/` 的 chunks.jsonl、bm25.json、faiss.index、manifest.json 不入库；`.gitkeep` 本地保留、不入库。
+使用 CPU BAAI/bge-small-zh-v1.5、L2 归一化与 FAISS 内积；BM25 使用 jieba，RRF 为 sum(1/(60+rank))。
+本轮构建使用已有模型缓存并设置 `HF_HUB_OFFLINE=1`，未下载模型。新环境首次构建需要准备模型或允许下载；embedding 不可用时记录异常类型并构建 BM25-only 索引。
+运行时只读本地模型；加载失败回退 BM25。`ENABLE_VECTOR_RAG=0` 或构建时 `--bm25-only` 可关闭向量路径。
+短段落与表格合并，单块上限 800 字，重叠 80 字；长表按完整行拆分并重复表头。
 
-```bash
-HF_ENDPOINT=https://hf-mirror.com .venv/bin/python -m app.rag.build_index
-```
+## 命名检索、引用与数值校验
 
-仍失败时，构建器保留 BM25-only 索引，并记录 embedding 异常类型。
-运行时不下载模型。服务启动不加载 embedding；缺少缓存或向量后端失败时回退 BM25。
+查询按大小写和空白归一化识别完整文件名、去后缀名称与明确别名。保留 BM25/FAISS/RRF；命名文档缺席时，从其片段按 BM25、同分顺序或 token 重叠选取保留位。
+保留位进入前 min(5, top_k)；多个文档保护已有保留位，结果总数不超过 top_k，并去重。
+已进入排名的命名文档使用同源前后各一块扩展，按 BM25 选择本地候选。日志包含 named_sources、named_reserved、named_neighbors。
+单独“PPO”不是文档别名；“手册”泛称可辅助检索，但不触发强制命名来源校验。
+路由不得删掉用户点名的文档。答案先答命名文档；冲突需披露差异并说明最终以代码为准。
 
-```bash
-ENABLE_VECTOR_RAG=0 .venv/bin/uvicorn app.main:app --port 8001
-# 只构建 BM25 索引：
-ENABLE_VECTOR_RAG=0 .venv/bin/python -m app.rag.build_index
-```
+数据引用为 `[source: 路径]`；文档引用为 `[来源: 文件名 §章节]`。文档引用必须映射到本轮 chunk；点名文档必须有对应真实引用。
+模型未提供引用时，不自动贴 docs[0]。首次校验失败后重试；第二次仍无合法引用则返回“未在检索片段中找到可引用依据，无法回答。不构成投资建议。”，无伪造引用，verified=false。
+模型异常时的 evidence_answer 从实际 chunk 摘录并引用，保留此确定性回退。
 
-关闭向量检索后，`search_docs.data.backend=bm25`，不会加载 embedding。
-重新启用后，如果当前只有 BM25 索引，必须重建才有 FAISS 向量。
-`--bm25-only` 也可以只构建词法索引。
+共享 NFKC 处理全角数字、百分号与 Unicode 负号。数值提取区分负收益、日期、范围、二元减法和中文标点。评分使用分制，收益/回撤可用百分比；检索分数、日期和非权威事实数字不作为数字依据。
+回答总长不超过 300 字，含引用与免责声明。verified 仅检查数字、引用、拒答和长度，不保证全文语义完整。
 
-索引目录：`data/index/`；产物为 `chunks.jsonl`、`bm25.json`、`faiss.index`、`manifest.json`。
-索引不入 Git；目录内保留本地 `.gitkeep`。
-每次检索检查语料、清单和索引文件哈希；变更时返回“索引过期，请重建”，不会静默使用旧内容。
-重建命令仍为 `.venv/bin/python -m app.rag.build_index`。
-短章节、表格不足目标块长时保留原文；相邻短段落与表格合并，单块上限为 800 字，递归切分重叠为 80 字。
-超长表格按完整行拆分并重复表头。
-
-### 校验与验证边界
-
-- 每条文档引用必须映射到本轮检索片段的文件名与章节前缀。
-- 文档解释至少包含一条真实引用。
-- 数字依据只含成功数据工具值和 authoritative 文本，排除检索分数、文档日期与 background/historical 事实数字。
-- 禁用旧值未标记时校验失败；明确标为旧值时只作为历史说明。
-- 校验失败最多重新生成一次；仍失败保留原答并返回 `verified=false`。
-- `llm_events` 与评测的 `llm_error_count` 区分真实模型调用与异常回退。
-- 引用校验只证明片段存在，不保证语义完备。数字校验不代替全文事实审查。
-
-### 评测与 HTTP
+## 最终验收
 
 ```bash
 .venv/bin/python -m pytest -q
+.venv/bin/python -m app.rag.build_index --check-corpus
+.venv/bin/python -m app.rag.build_index
+.venv/bin/python -m app.rag.build_index --check-golden
 .venv/bin/python eval/run_doc_eval.py --offline
 .venv/bin/python eval/run_doc_eval.py
 .venv/bin/python eval/run_eval.py --mode agent
-
-.venv/bin/uvicorn app.main:app --port 8001
-# 另一个终端：
-curl -s -X POST localhost:8001/chat -H 'Content-Type: application/json' \
-  -d '{"question":"评分系统四个维度的权重分别是多少？"}'
-curl -s -X POST localhost:8001/chat -H 'Content-Type: application/json' \
-  -d '{"question":"最新市场评分和状态"}'
-curl -s localhost:8001/tools
-curl -s localhost:8001/healthz
+# 服务运行时：
 .venv/bin/python eval/check_score_units.py
 ```
 
-真实模型调用会发送问题和工具结果（包括检索片段）至配置的模型服务。本次执行有用户明确授权。
+- pytest 原始摘要：`91 passed, 1 warning in 11.30s`；无 skip/xfail，全部离线，无模型下载。受限环境的 TestClient 阻塞，最终使用允许本地服务的执行环境。
+- 语料预检：`corpus_ok=9`。
+- 构建：`documents=9 chunks=124 backend=hybrid`。
+- 原文核验：`golden_quotes=16/16`，逐字匹配。
+- 离线文档评测：execution=offline_fallback；Recall@5=0.9375；citation_valid_rate=1.0；expected_source_cited_rate=0.8125；keyword_coverage=0.5737704918032787；verified_rate=0.875；p50/p95=0.06/10.34s；llm_error_count=34（故意注入 offline 异常）。离线摘要结果不代表真实模型能力，日志保留在 /tmp/phase21-doc-offline.log。
 
-最终验证输出：
+真实 16 题结果（2026-11-09T13:47:49+08:00，deepseek-flash）：
 
-- 单测：`57 passed, 1 warning in 22.98s`。全部离线；原有 30 项无回归。
-- 索引：`documents=8 chunks=119 backend=hybrid`。
-- 原文核验：`golden_quotes=15/15`，逐字匹配。
-- 离线文档评测：`execution=offline_fallback`；Recall@5=13/15；引用合法率100%；关键词覆盖率45.3%。仅为片段摘录能力，不冒充模型结果。
-- 真实文档评测：`execution=configured_llm`；Recall@5=86.67%；引用合法率100%；期望来源命中率93.3%；关键词覆盖率98.1%；verified率93.3%。
-- 文档延迟 p50/p95：7.22s / 20.32s；LLM调用错误0次；backend={'hybrid': 15, 'bm25': 0}。
-- 25题真实回归：25/25；工具选择准确率96%；引用支持率100%；LLM调用错误0次。
-- HTTP：文档题有真实章节引用；数据题返回33.9/下行；工具数9；空问题422；RAG和vector开关可查询。
-- 评分单位：Task A和Phase 2 HTTP的连续5+3次检查均为`score_unit_checks=8/8`。验收后关闭服务。
-- 向量关闭检查：`backend=bm25 chunks=5`，`embedding_loaded=False`。
+| 指标 | 结果 |
+|---|---|
+| total | 16 |
+| recall_at_5 | 0.875 |
+| citation_valid_rate | 1.0 |
+| expected_source_cited_rate | 1.0 |
+| keyword_coverage | 0.9508196721311475 |
+| verified_rate | 0.9375 |
+| latency_p50 | 7.12 |
+| latency_p95 | 25.67 |
+| llm_error_count | 0 |
+| backend_counts | {'hybrid': 16, 'bm25': 0} |
 
-文档产物：`eval/results_doc.json`、`eval/report_doc.md`、`eval/answers_doc.md`。
-数据回归产物仍为 `eval/*_agent.*`，只收录本轮重跑结果。
-baseline 的三个文件与原25题 `golden_set.yaml` 不改动。
+| 题目 | Recall@5 | expected_source | 关键词 | verified |
+|---|---|---|---|---|
+| Q15 | 1 | 1 | 6/6 | True |
+| Q16 | 1 | 1 | 6/6 | True |
 
-### 已知限制与文档矛盾
+25 题真实回归（2026-11-09T13:51:38）：`25/25`；工具选择准确率=0.96；引用支持率=1.0；verified_rate=1.0；p50/p95=4.76/7.35s；llm_error_count=0。
+全部题目为指标分母；空期望工具仍按无交集计分。G03 verified=True。baseline 三个文件和原 25 题 golden_set.yaml 未改动。
 
-- 指定原文未进入top-5：Q14, Q15。这是严格quote判定；不改题、不删题、不换quote。
-- Q10 原文写问卷满分148分，原文算式与该值矛盾；按任务给出的算式相加为152。golden照录148，在caveat说明矛盾。回答不自行补算新合计数。
-- Q13 手册原则为置NaN、评分中性、不填0；实际数据存在457行填0。原则回答与实际数据分开，实际数值以`get_data_caveats`为准。
-- Q07 原文PMI可用时间与实际宏观滞后实现不同；原文解释保留引用，实际以数据工具和源码为准。
-- 离线摘要的关键词覆盖有限；冷启动首次检索加载CPU模型，延迟高于热请求。
-- LangGraph依赖有未来默认值变更警告；本任务未升级核心依赖。
+HTTP：healthz status=ok、rag_enabled=true、backend=hybrid；tools 数量 9；Q15 包含设计四项及规则基准/夏普差异并引用强化学习.txt；Q16 包含全部系数、3bp 与 clip 并引用新文档；两题 verified=true。
+数据题返回 33.90/33.9 与“下行”，verified=true；空问题 422。连续 5+3 次原始输出：`score_unit_checks=8/8`。
+验收仅记录并关闭本次 uvicorn PID；`server_stopped=True port_8001_closed=True`。HTTP 原始记录为 /tmp/phase21-http.log（临时日志不入库）。
 
-### 原有测试断言变更
+产物：[report_doc.md](eval/report_doc.md)、[results_doc.json](eval/results_doc.json)、[answers_doc.md](eval/answers_doc.md)、[report_agent.md](eval/report_agent.md)、[results_agent.json](eval/results_agent.json)、[answers_agent.md](eval/answers_agent.md)。JSON 均来自评测脚本，没有手工改结果。
 
-1. `/tools` 数量从8改9：新增search_docs。
-2. `/healthz` 的rag_enabled从false改true，并检查vector_rag_enabled：Phase 2支持BM25，向量开关单独返回。
+## 已知限制与原有断言
 
-### 工作区范围
+- Q14 Recall@5=0：golden 锚定 artifact，指定原文片段未进入前五；保留原 source_quote，不以其他同义片段替换。 本轮未命中原文锚点的题目：Q12, Q14。
+- Q10 原文问卷合计与算式矛盾，照录原文，不自行补算新合计。
+- Q13 手册原则与北向实际填零不同；Q07 原文 PMI 可用时间与实际滞后不同。规则和实际数据分开说明，实际以数据工具为准。
+- 冷启动需加载 CPU 模型；上述延迟来自本轮运行，不是稳定服务 SLA。
+- LangGraph 有一项未来默认值变更警告；本次未升级依赖。
+- Q01 同时调用市场数据工具；权重百分比触发评分单位校验。保留 verified=false，不改写结果。
+- Q01: verified=False；删除证据不支持的数值[]；仅引用tool_results，遵守拒答政策和字数限制。市场评分及分项使用分制，删除错误百分号并保留原始分数，不得改动数值。；golden评分失败项：无。
+- Q14: verified=True；无校验错误；golden评分失败项：缺少关键词 市场; 缺少关键词 持仓; 缺少关键词 净值。
 
-仅修改 `fund-platform/agent/` 与 `fund-platform/.gitignore`。
-原有4项范围外未跟踪内容保留，不回滚、不暂存。
-不提交密钥、虚拟环境、索引二进制或模型缓存；不push。
+本次未改弱任何既有断言。test_api 的 rag_enabled=True 断言保留，新增 validate 成功 fixture，避免依赖用户真实索引；新增独立用例验证 degraded/ok 和错误信息清理。
+既有图测试的 offline fixture 新增 embedding 异常模拟，确保不加载/下载真实模型；既有断言保留，混合检索另由 fake encoder 测试。
+原有 57 项测试均保留；本轮合计 91 项，无 skip/xfail。
 
-### 本轮未通过项
+本次指标问题额外约束使用数据工具；风险档、危机和策略主语从成功工具行保留，防止模型省略题目身份。
 
-- Q02：verified=False；期望来源引用=True；关键词/数字检查：通过。
-- Q15：verified=True；期望来源引用=False；关键词/数字检查：缺少关键词 换手。
-
-固定题集、原文quote与预期值均保留。未通过项不按通过计分。
-
-### 保守校验与回放
-
-- Q02 的原文公式 `pe_pct-0.30` 中，减号被简单数字提取器当作负号，导致该题 `verified=false`。原答和公式保留，不为通过校验改数字。
-- 最终校验器对保存的25条真实模型答案重新执行工具并校验：`verification_replay=25/25`。原始产物保留当次运行的verified标记，不改写历史结果。
+本次仅修改 agent/ 与新增 PPO 文档。范围外四项原有未跟踪内容保留。未提交密钥、虚拟环境、索引、模型缓存和被忽略手册。未 push。
