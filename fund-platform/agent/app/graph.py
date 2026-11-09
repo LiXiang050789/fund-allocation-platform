@@ -16,6 +16,8 @@ from app.tools import registry
 from app.rag.citations import (DOC_REF, citation, citation_matches, document_text,
                                marked_numbers, retrieved_chunks)
 
+from app.rag.named import named_sources
+
 log = logging.getLogger(__name__)
 
 
@@ -108,7 +110,7 @@ def router(state):
     events = list(state.get("llm_events", []))
     try:
         response = get_llm().bind_tools(registry.TOOL_SCHEMAS).invoke([
-            SystemMessage(content="只选择回答问题必需的只读工具。日期、策略名称必须来自问题。规则/定义/为什么/流程/问卷/费率/PPO设计/文档口径/前视解释用search_docs，query保留原问题及其关键概念。具体日期市场评分和策略回测指标用数据工具；两者都需要时同时调用。评分系统权重与满分是文档规则，不是最新市场评分；C1-C5产品匹配是文档规则，C2/C3/C4策略收益是get_risk_tier。实际北向缺口与特征维度用get_data_caveats；状态计数用get_market_state_summary。拒答问题可以查风险适当性或历史指标，不得推荐个股。禁止调用白名单外工具。"),
+            SystemMessage(content="只选择回答问题必需的只读工具。日期、策略名称必须来自问题。规则/定义/为什么/流程/问卷/费率/PPO设计/文档口径/前视解释用search_docs，query保留原问题及其关键概念，尤其不得删去问题点名的文件名或文档别名。具体日期市场评分和策略回测指标用数据工具；两者都需要时同时调用。评分系统权重与满分是文档规则，不是最新市场评分；C1-C5产品匹配是文档规则，C2/C3/C4策略收益是get_risk_tier。实际北向缺口与特征维度用get_data_caveats；状态计数用get_market_state_summary。拒答问题可以查风险适当性或历史指标，不得推荐个股。禁止调用白名单外工具。"),
             HumanMessage(content=state["question"] + ("\n上轮结果：" + json.dumps(state["tool_results"], ensure_ascii=False) if state["rounds"] else ""))])
         calls = response.tool_calls
         events.append({"stage": "router", "status": "success"})
@@ -222,7 +224,7 @@ def compose(state):
                 else:
                     evidence.append(result)
             response = get_llm().invoke([
-                SystemMessage(content="只用提供的tool_results回答，数字只能来自证据。中文简洁回答，正文不超过140字；引用和免责声明也计入总长300字。仅回答市场评分分项时使用估值/宏观/情绪/趋势标签。其他问题保留原主题名称，不强加评分标签。累计收益、年化收益、最大回撤、年化波动等比例字段，原始小数乘100写成百分比，保留两位小数，避免一位小数损失原始精度；夏普/卡玛/索提诺保留比率原值。市场评分和分项使用分制；交易日、维度/列数、天数、排名使用计数单位，均不得加百分号。文档解释至少逐字复制一条chunk的citation，不得编造引用；选择直接支持答案的章节。文档中的数字仅authoritative可用，background/historical只解释背景，不得引用其事实数字。旧值/禁用清单只可标为旧值，不得作为当前事实。涉及数据口径时说明实际数据以数据工具为准。发现文档算术矛盾时仅说明矛盾并照录原值，不得计算或写出证据没有的合计数。不提供个性化投资建议。"),
+                SystemMessage(content="只用提供的tool_results回答，数字只能来自证据。中文简洁回答，正文不超过140字；引用和免责声明也计入总长300字。仅回答市场评分分项时使用估值/宏观/情绪/趋势标签。其他问题保留原主题名称，不强加评分标签。累计收益、年化收益、最大回撤、年化波动等比例字段，原始小数乘100写成百分比，保留两位小数，避免一位小数损失原始精度；夏普/卡玛/索提诺保留比率原值。市场评分和分项使用分制；交易日、维度/列数、天数、排名使用计数单位，均不得加百分号。问题点名某文档时，先回答该文档的内容，不得用另一文档替代；若与权威手册或最终代码不一致，须用一句话说明差异并明确“最终以代码为准”。文档解释至少逐字复制一条chunk的citation，不得编造引用；多个来源优先引用被点名文档，涉及最终代码差异时也引用最终代码依据；选择直接支持答案的章节。文档中的数字仅authoritative可用，background/historical只解释背景，不得引用其事实数字。旧值/禁用清单只可标为旧值，不得作为当前事实。涉及数据口径时说明实际数据以数据工具为准。发现文档算术矛盾时仅说明矛盾并照录原值，不得计算或写出证据没有的合计数。不提供个性化投资建议。"),
                 HumanMessage(content=json.dumps({"question": state["question"], "tool_results": evidence,
                                                  "correction": state.get("correction", "")}, ensure_ascii=False))])
             events.append({"stage": "compose", "status": "success"})
@@ -241,7 +243,9 @@ def compose(state):
     body = DOC_REF.sub("", answer)
     body = re.sub(r"\[source:.*?\]", "", body, flags=re.S).strip()
     references = [f"[source: {sources[0]}]"] if sources else []
-    references += doc_references[:1]
+    named = named_sources(state["question"], docs, explicit=True)
+    doc_references.sort(key=lambda ref: not any(f"来源: {name} §" in ref for name in named))
+    references += doc_references[:2]
     # Preserve a forged model reference for the verifier instead of silently repairing it.
     for name, section in DOC_REF.findall(answer):
         reference = f"[来源: {name} §{section}]"
@@ -307,7 +311,9 @@ def verify(state):
     obsolete_allowed, obsolete_violations = marked_numbers(body)
     values += obsolete_allowed
     needs_reference = bool(docs) and "当前数据无法回答" not in body
-    reference_valid = not invalid_refs and (not needs_reference or bool(matched))
+    missing_named = [name for name in named_sources(state['question'], docs, explicit=True)
+                     if not any(c['source_name'] == name for c in matched)]
+    reference_valid = not invalid_refs and not missing_named and (not needs_reference or bool(matched))
     allowed = {0, 1, 2, 3, 5, 7, 10, 100}
     unsupported = [n for n in numeric_values(body) if n not in allowed and not any(
         abs(n-v) <= .1+1e-9 or abs(n/100-v) <= .001+1e-9 or abs(n-v*100) <= .1+1e-9 for v in values)]
@@ -317,6 +323,8 @@ def verify(state):
     correction = f"删除证据不支持的数值{unsupported}；仅引用tool_results，遵守拒答政策和字数限制。" if not valid else ""
     if not reference_valid:
         correction += "引用缺失或伪造：只使用本轮chunk文件名和章节前缀，至少包含一条合法文档引用。"
+    for name in missing_named:
+        correction += f"问题点名了文档 {name}，必须引用 {name} 的原文 chunk。"
     if obsolete_violations:
         correction += "出现禁用旧值；删除或明确标记旧值，禁止当作当前事实。"
     if unit_error:

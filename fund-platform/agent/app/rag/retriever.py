@@ -12,6 +12,7 @@ from rank_bm25 import BM25Okapi
 
 from app.config import settings
 from .index import encode, tokens, validate
+from .named import named_sources
 
 log = logging.getLogger(__name__)
 CORPUS_PATH = Path(__file__).with_name('corpus.yaml')
@@ -50,7 +51,9 @@ def search(query, top_k=5, *, root=None, corpus_path=None, index_dir=None, vecto
     manifest = validate(root, corpus_path, index_dir)  # Hash-check on every call, including cached indexes.
     signature = json.dumps(manifest['artifacts'], sort_keys=True)
     chunks, bm25 = load_index(str(index_dir), signature)
-    scores = bm25.get_scores(tokens(query))
+    named = named_sources(query, chunks)
+    query_tokens = tokens(query)
+    scores = bm25.get_scores(query_tokens)
     candidates = min(len(chunks), max(20, top_k*4))
     lexical = [i for i in sorted(range(len(chunks)), key=lambda i: (-scores[i], i)) if scores[i] > 0][:candidates]
     rankings = [lexical]
@@ -75,6 +78,49 @@ def search(query, top_k=5, *, root=None, corpus_path=None, index_dir=None, vecto
             found.append({**chunk, 'score': score})
         if len(found) == top_k:
             break
+    reserved = []
+    protected = set()
+    neighbors = []
+    for name in named[:top_k]:
+        existing = next((i for i, c in enumerate(found) if c['source_name'] == name), None)
+        if existing is not None:
+            # Expand adjacent chunks in corpus order, then rank this local window.
+            # This retains a named source while recovering paragraphs split at headings.
+            pool = [i for i, c in enumerate(chunks) if c['source_name'] == name]
+            current = next(i for i in pool if chunks[i]['chunk_id'] == found[existing]['chunk_id'])
+            position = pool.index(current)
+            window = pool[max(0, position-1):position+2]
+            neighbors.extend(chunks[i]['chunk_id'] for i in window if i != current)
+            best = min(window, key=lambda i: (-scores[i], i))
+            found[existing] = {**chunks[best], 'score': float(scores[best])}
+            protected.add(existing)
+            continue
+        pool = [i for i, c in enumerate(chunks) if c['source_name'] == name]
+        if not pool:
+            continue
+        if any(scores[i] > 0 for i in pool):
+            best = min(pool, key=lambda i: (-scores[i], i))
+        else:
+            best = min(pool, key=lambda i: (-sum(t in chunks[i]['text'] for t in query_tokens), i))
+        item = {**chunks[best], 'score': float(scores[best])}
+        if len(found) < top_k:
+            slot = len(found)
+            found.append(item)
+        else:
+            slot = next((i for i in reversed(range(len(found))) if i not in protected), None)
+            if slot is None:
+                break
+            found[slot] = item
+        protected.add(slot)
+        reserved.append(name)
+    unique, seen = [], set()
+    for chunk in found:
+        key = (chunk['source_name'], chunk['section'], chunk['text'])
+        if key not in seen:
+            unique.append(chunk)
+            seen.add(key)
+    found = unique
     log.info(json.dumps(dict(query=query, top_k=top_k, backend=backend, candidates=sum(map(len, rankings)),
+                  named_sources=named, named_reserved=reserved, named_neighbors=neighbors,
                   latency_ms=round((time.perf_counter()-started)*1000, 2)), ensure_ascii=False))
     return dict(backend=backend, chunks=found), manifest['built_at'].split('T')[0]

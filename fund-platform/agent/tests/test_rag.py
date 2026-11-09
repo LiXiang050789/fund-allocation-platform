@@ -234,3 +234,71 @@ def test_ppo_golden_authority_and_verbatim_quotes():
     files = {f['path']: f['authority'] for f in load_corpus(settings.agent_dir/'app/rag/corpus.yaml')}
     assert files[items[-1]['source']] == 'authoritative'
     assert files[items[-2]['source']] == 'background'
+
+
+@pytest.mark.parametrize('query', ['bond.txt', '债券', '苹果估值 bond.txt CompletelyUnrelated'])
+def test_named_source_reservation(mini_corpus, query, caplog):
+    import logging
+    root, corpus, index = mini_corpus
+    build(root, corpus, index, vector=False)
+    with caplog.at_level(logging.INFO, logger='app.rag.retriever'):
+        result, _ = search(query, top_k=1, root=root, corpus_path=corpus, index_dir=index, vector=False)
+    assert any(c['source_name'] == 'bond.txt' for c in result['chunks'])
+    assert 'named_sources' in caplog.text and 'named_reserved' in caplog.text
+
+
+def test_plain_query_keeps_rrf(mini_corpus, monkeypatch):
+    import app.rag.retriever as retriever
+    root, corpus, index = mini_corpus
+    build(root, corpus, index, vector=False)
+    args = dict(root=root, corpus_path=corpus, index_dir=index, vector=False)
+    actual = search('苹果估值', **args)[0]
+    monkeypatch.setattr(retriever, 'named_sources', lambda *_: [])
+    assert search('苹果估值', **args)[0] == actual
+
+
+def test_multiple_named_sources_protect_reserved_slots(mini_corpus):
+    root, corpus, index = mini_corpus
+    build(root, corpus, index, vector=False)
+    result, _ = search('苹果估值 bond.txt risk.docx', top_k=3, root=root, corpus_path=corpus, index_dir=index, vector=False)
+    assert {'bond.txt', 'risk.docx'} <= {c['source_name'] for c in result['chunks']}
+    assert len(result['chunks']) <= 3
+
+
+def test_named_matching_and_generic_manual():
+    from app.rag.named import named_sources
+    assert named_sources(' 强化学习 设计文档 ', []) == ['强化学习.txt']
+    assert named_sources(' PPO ', []) == []
+    assert named_sources('手册怎么说', [], explicit=True) == []
+    assert named_sources('最终 PPO 奖励', []) == ['PPO奖励口径-最终代码.md']
+
+
+@pytest.mark.parametrize('cite_named,valid', [(False, False), (True, True)])
+def test_named_source_verifier(cite_named, valid):
+    from app.graph import verify
+    state = doc_state('设计稿为收益奖励与波动、回撤、换手惩罚。[来源: 项目彻底理解手册-答辩备战版.md §规则]')
+    state['question'] = '强化学习设计文档中，PPO奖励函数的正向奖励和三类惩罚是什么？'
+    chunk = state['tool_results'][0]['data']['chunks'][0]
+    chunk['source_name'] = '项目彻底理解手册-答辩备战版.md'
+    if cite_named:
+        state['tool_results'][0]['data']['chunks'].append({**chunk, 'source_name': '强化学习.txt'})
+        state['answer'] += '[来源: 强化学习.txt §规则]'
+    result = verify(state)
+    assert result['verified'] is valid
+    if not valid:
+        assert '强化学习.txt' in result['correction']
+
+
+def test_named_neighbor_enters_candidates(mini_corpus, monkeypatch, caplog):
+    import logging
+    from app.rag import retriever
+    root, corpus, index = mini_corpus
+    (root/'apple.md').write_text('# 苹果规则\n## 概述\n普通说明。\n## 细则\n独特指标细则。\n## 尾声\n结尾。')
+    build(root, corpus, index, vector=False)
+    chunks = [json.loads(line) for line in (index/'chunks.jsonl').read_text().splitlines()]
+    first = next(i for i, c in enumerate(chunks) if c['source_name'] == 'apple.md')
+    monkeypatch.setattr(retriever, 'rrf', lambda _: [(first, 1.0)])
+    with caplog.at_level(logging.INFO, logger='app.rag.retriever'):
+        result, _ = search('apple.md 独特指标细则', top_k=1, root=root, corpus_path=corpus, index_dir=index, vector=False)
+    assert '独特指标' in result['chunks'][0]['text']
+    assert 'named_neighbors' in caplog.text
