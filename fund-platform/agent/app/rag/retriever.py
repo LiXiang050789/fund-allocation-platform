@@ -78,42 +78,53 @@ def search(query, top_k=5, *, root=None, corpus_path=None, index_dir=None, vecto
             found.append({**chunk, 'score': score})
         if len(found) == top_k:
             break
-    reserved = []
-    protected = set()
-    neighbors = []
-    for number, name in enumerate(named[:top_k]):
-        slot_limit = min(5, top_k) if number < 5 else top_k
-        existing = next((i for i, c in enumerate(found[:slot_limit]) if c['source_name'] == name), None)
-        if existing is not None:
-            # Expand adjacent chunks in corpus order, then rank this local window.
-            # This retains a named source while recovering paragraphs split at headings.
-            pool = [i for i, c in enumerate(chunks) if c['source_name'] == name]
-            current = next(i for i in pool if chunks[i]['chunk_id'] == found[existing]['chunk_id'])
-            position = pool.index(current)
-            window = pool[max(0, position-1):position+2]
-            neighbors.extend(chunks[i]['chunk_id'] for i in window if i != current)
-            best = min(window, key=lambda i: (-scores[i], i))
-            found[existing] = {**chunks[best], 'score': float(scores[best])}
-            protected.add(existing)
+    # Reserve source-wide lexical candidates even when RRF already found this file.
+    def chunk_key(chunk):
+        return chunk['source_name'], chunk['section'], chunk['text']
+
+    pools, priority = {}, {}
+    for name in named:
+        pool, keys = [], set()
+        for i, chunk in enumerate(chunks):
+            key = chunk_key(chunk)
+            if chunk['source_name'] == name and key not in keys:
+                pool.append(i)
+                keys.add(key)
+        zero = all(scores[i] == 0 for i in pool)
+        for i in pool:
+            coverage = sum(token in chunks[i]['text'] for token in set(query_tokens)) if zero else 0
+            priority[i] = (-float(scores[i]), -coverage, i)
+        if pool:
+            pools[name] = sorted(pool, key=priority.__getitem__)
+    if len(pools) == 1:
+        selected = next(iter(pools.values()))[:min(2, top_k)]
+    else:
+        # Cover each named file before distributing remaining slots by lexical score.
+        selected = [pool[0] for pool in pools.values()][:top_k]
+        remaining = [i for pool in pools.values() for i in pool[1:]]
+        selected += sorted(remaining, key=priority.__getitem__)[:max(0, top_k-len(selected))]
+    width = min(top_k, max(5, len(selected)))
+    selected_keys = {chunk_key(chunks[i]) for i in selected}
+    protected = {i for i, chunk in enumerate(found[:width]) if chunk_key(chunk) in selected_keys}
+    for index in selected:
+        chunk = chunks[index]
+        key = chunk_key(chunk)
+        if any(chunk_key(c) == key for c in found[:width]):
             continue
-        pool = [i for i, c in enumerate(chunks) if c['source_name'] == name]
-        if not pool:
-            continue
-        if any(scores[i] > 0 for i in pool):
-            best = min(pool, key=lambda i: (-scores[i], i))
-        else:
-            best = min(pool, key=lambda i: (-sum(t in chunks[i]['text'] for t in query_tokens), i))
-        item = {**chunks[best], 'score': float(scores[best])}
-        if len(found) < slot_limit:
+        item = {**chunk, 'score': float(scores[index])}
+        if len(found) < width:
             slot = len(found)
             found.append(item)
         else:
-            slot = next((i for i in reversed(range(min(len(found), slot_limit))) if i not in protected), None)
+            slot = next((i for i in reversed(range(min(len(found), width))) if i not in protected), None)
             if slot is None:
                 break
             found[slot] = item
         protected.add(slot)
-        reserved.append(name)
+    reserved = list(dict.fromkeys(chunks[i]['source_name'] for i in selected))
+    reserved_chunks = [{key: chunks[i][key] for key in ('source_name', 'chunk_id', 'section')}
+                       for i in selected]
+    neighbors = []  # Source-wide ranking replaces the old adjacent-only selection.
     unique, seen = [], set()
     for chunk in found:
         key = (chunk['source_name'], chunk['section'], chunk['text'])
@@ -123,5 +134,6 @@ def search(query, top_k=5, *, root=None, corpus_path=None, index_dir=None, vecto
     found = unique
     log.info(json.dumps(dict(query=query, top_k=top_k, backend=backend, candidates=sum(map(len, rankings)),
                   named_sources=named, named_reserved=reserved, named_neighbors=neighbors,
+                  named_reserved_chunks=reserved_chunks,
                   latency_ms=round((time.perf_counter()-started)*1000, 2)), ensure_ascii=False))
     return dict(backend=backend, chunks=found), manifest['built_at'].split('T')[0]

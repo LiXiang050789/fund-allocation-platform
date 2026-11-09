@@ -66,6 +66,19 @@ def evaluate(items, offline=False):
     return summary, results
 
 
+def retrieval_note(result):
+    """Separate a quote-anchor miss from a failure to answer the question."""
+    label = result['id']
+    complete = result['keyword_hits'] == result['keyword_total']
+    if not result['recall_at_5']:
+        status = '锚点偏差' if complete else '检索/回答失败'
+    elif complete and result['expected_source_cited'] and result['verified']:
+        status = '通过'
+    else:
+        status = '回答/校验失败'
+    return f"{label}：{status}；Recall@5={int(result['recall_at_5'])}；关键词={result['keyword_hits']}/{result['keyword_total']}；保留原 source_quote。"
+
+
 def write_reports(summary, results):
     payload = dict(summary=summary, results=results)
     (EVAL_DIR/'results_doc.json').write_text(json.dumps(payload, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
@@ -74,8 +87,7 @@ def write_reports(summary, results):
     lines += ['', 'Recall@5 按固定全部16题统计。引用指标要求至少一个真实引用，且全部引用可映射。',
               'keyword_coverage 按所有期望关键词统计。数字与关键词明细记录在 results_doc.json 的 fails。',
               '引用只校验片段存在，不保证语义完备。background/historical 的数字不作为当前事实依据。',
-              ('Q14 Recall@5=0：golden 锚定 artifact，指定原文片段未进入前五；保留原 source_quote。'
-               if any(r['id'] == 'Q14' and not r['recall_at_5'] for r in results) else 'Q14 原文片段进入前五；保留原 source_quote。'),
+              *[retrieval_note(r) for r in results if r['id'] in {'Q12', 'Q14'}],
               '', '| ID | Recall@5 | 引用合法 | 期望来源 | verified | 关键词 | 失败项 |',
               '|---|---|---|---|---|---|---|']
     for r in results:

@@ -394,3 +394,53 @@ def test_policy_evidence_omits_structural_circled_labels(monkeypatch):
 def test_abstention_without_citation_is_not_verified():
     from app.graph import verify
     assert not verify(doc_state('当前数据无法回答。'))['verified']
+
+
+@pytest.mark.parametrize('top_k', [3, 5, 8])
+def test_named_wrong_rrf_chunk_reserves_source_second_rank(mini_corpus, monkeypatch, caplog, top_k):
+    import logging
+    from app.rag import retriever
+    root, corpus, index = mini_corpus
+    (root/'apple.md').write_text('# 专题\n' + '\n'.join(
+        f'## 章节{i}\n本段说明编号{i}。' for i in range(7)), encoding='utf-8')
+    build(root, corpus, index, encoder=fake_encode)
+    chunks = [json.loads(line) for line in (index/'chunks.jsonl').read_text().splitlines()]
+    source = [i for i, c in enumerate(chunks) if c['source_name'] == 'apple.md']
+    wrong, first, second = source[0], source[-2], source[-1]
+    assert second - wrong > 2  # The relevant passage is outside the old neighbor window.
+    scores = np.zeros(len(chunks))
+    scores[first], scores[second] = 10.0, 9.0
+    monkeypatch.setattr(retriever.BM25Okapi, 'get_scores', lambda *_: scores)
+    ranked = sorted(source, key=lambda i: (-scores[i], i))
+    assert ranked[1] == second
+    rrf_order = [wrong] + [i for i in range(len(chunks)) if i not in (wrong, first, second)]
+    assert second not in rrf_order[:top_k]
+    def wrong_fusion(rankings):
+        assert len(rankings) == 2  # BM25 and actual FAISS remain enabled.
+        return [(i, 1/(60+rank)) for rank, i in enumerate(rrf_order, 1)]
+    monkeypatch.setattr(retriever, 'rrf', wrong_fusion)
+    encoded = []
+    def encoder(texts):
+        encoded.extend(texts)
+        return fake_encode(texts)
+    with caplog.at_level(logging.INFO, logger='app.rag.retriever'):
+        result, _ = search('apple.md 查询专题', top_k=top_k, root=root,
+                          corpus_path=corpus, index_dir=index, vector=True, encoder=encoder)
+    assert encoded and result['backend'] == 'hybrid'
+    found = result['chunks'][:min(5, top_k)]
+    assert chunks[second]['chunk_id'] in {c['chunk_id'] for c in found}
+    assert chunks[first]['chunk_id'] in {c['chunk_id'] for c in found}
+    assert len(result['chunks']) <= top_k
+    assert chunks[second]['chunk_id'] in caplog.text and chunks[second]['section'] in caplog.text
+
+
+@pytest.mark.parametrize('recall,hits,status', [(False, 3, '锚点偏差'), (False, 0, '检索/回答失败'), (True, 3, '通过')])
+def test_report_distinguishes_anchor_miss_from_answer_failure(monkeypatch, recall, hits, status):
+    import sys
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]/'eval'))
+    from run_doc_eval import retrieval_note
+    result = {'id': 'Q14', 'recall_at_5': recall, 'keyword_hits': hits, 'keyword_total': 3,
+              'expected_source_cited': True, 'verified': True}
+    note = retrieval_note(result)
+    assert status in note
+    assert 'artifact' not in note
