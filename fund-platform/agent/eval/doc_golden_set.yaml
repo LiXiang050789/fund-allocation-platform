@@ -459,25 +459,19 @@ questions:
   authority: background
 - id: Q15
   question: 强化学习设计文档中，PPO奖励函数的正向奖励和三类惩罚是什么？
-  golden_answer: '环境内置金融风控评价体系，不单一追逐收益，实现风险约束下的收益优化：
-
-    ① 正向奖励：根据当日组合收益给予正向激励，引导模型积累超额收益；
-
-    ② 波动率惩罚：基于历史滚动窗口计算波动，惩罚高风险震荡持仓；
-
-    ③ 回撤惩罚：基于历史累计收益计算最大回撤，严厉惩罚持续亏损状态；
-
-    ④ 换手率惩罚：约束频繁无效调仓，降低交易摩擦成本，贴合实盘。
-
-    - 第五步：状态迭代 Next State
-
-    完成当日交易后，环境自动更新时间索引、持仓权重、净值状态，进入下一交易日，形成完整时序迭代闭环，直至样本结束。'
-  expected_keywords:
-  - 收益
-  - 波动
-  - 回撤
-  - 换手
+  golden_answer: '设计文档《强化学习.txt》写：① 正向奖励为当日组合收益；② 波动率惩罚；③ 回撤惩罚；④ 换手率惩罚。最终训练代码实际为：10.0×（组合收益-规则基准收益）-0.5×波动-0.0×换手-1.0×回撤加深+0.02×夏普变化，换手成本3bp已计入组合收益，clip(-5,5)。两者差异是设计稿与最终实现的差异，以代码为准。'
+  expected_keywords: [收益, 波动, 回撤, 换手, 规则基准, 夏普]
   expected_numeric: []
   source: fund-platform/docs/强化学习.txt
   source_quote: ④ 换手率惩罚：约束频繁无效调仓，降低交易摩擦成本，贴合实盘。
   authority: background
+  caveat: 设计文档为早期方案；最终代码以 fund-platform/docs/PPO奖励口径-最终代码.md 为准。
+- id: Q16
+  question: 最终 PPO 训练的奖励函数是什么？正向项、各项惩罚/奖励、系数和 clip 范围是什么？
+  golden_answer: '最终奖励 = 10.0 ×（组合收益 - 规则基准收益） - 0.5 × 波动 - 0.0 × 换手 - 1.0 × 回撤加深 + 0.02 × 夏普变化，并 clip 到 [-5, 5]。换手成本 3bp 已计入组合收益；reward_coef 的解包顺序为 base/vol/turn/dd。'
+  expected_keywords: [规则基准, 波动, 回撤, 换手, 夏普, clip]
+  expected_numeric: [10.0, 0.5, 0.0, 1.0, 0.02, 5]
+  source: fund-platform/docs/PPO奖励口径-最终代码.md
+  source_quote: 最终奖励 = 10.0 ×（组合收益 - 规则基准收益） - 0.5 × 波动 - 0.0 × 换手 - 1.0 × 回撤加深 + 0.02 × 夏普变化，并 clip 到 [-5, 5]。
+  authority: authoritative
+  caveat: 《强化学习.txt》为早期设计稿，最终以代码为准。

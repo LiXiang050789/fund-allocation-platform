@@ -219,3 +219,18 @@ def test_known_source_filename_is_metadata_not_a_numeric_claim():
     assert verify(state)['verified']
     state['answer'] += '指标62.7。'
     assert not verify(state)['verified']
+
+
+def test_ppo_golden_authority_and_verbatim_quotes():
+    from app.config import settings
+    from app.rag.ingest import load_corpus
+    root = settings.platform_dir.parent
+    items = yaml.safe_load((settings.agent_dir/'eval/doc_golden_set.yaml').read_text())['questions']
+    assert len(items) == 16
+    for item in items[-2:]:
+        assert any(item['source_quote'] in c['text'] for c in chunks_for(root/item['source'], root, item['authority']))
+    assert items[-2]['source'] == 'fund-platform/docs/强化学习.txt'
+    assert items[-2]['source_quote'] == '④ 换手率惩罚：约束频繁无效调仓，降低交易摩擦成本，贴合实盘。'
+    files = {f['path']: f['authority'] for f in load_corpus(settings.agent_dir/'app/rag/corpus.yaml')}
+    assert files[items[-1]['source']] == 'authoritative'
+    assert files[items[-2]['source']] == 'background'

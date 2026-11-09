@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""固定15题的文档召回、引用与问答评测。"""
+"""固定16题的文档召回、引用与问答评测。"""
 from __future__ import annotations
 
 import argparse
@@ -71,7 +71,7 @@ def write_reports(summary, results):
     (EVAL_DIR/'results_doc.json').write_text(json.dumps(payload, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
     lines = ['# 文档问答评测报告', '', f"执行方式：`{summary['execution']}`", f"时间：{summary['run_at']}", '']
     lines += [f'- {key}: {value}' for key, value in summary.items() if key not in {'execution','run_at'}]
-    lines += ['', 'Recall@5 按固定全部15题统计。引用指标要求至少一个真实引用，且全部引用可映射。',
+    lines += ['', 'Recall@5 按固定全部16题统计。引用指标要求至少一个真实引用，且全部引用可映射。',
               'keyword_coverage 按所有期望关键词统计。数字与关键词明细记录在 results_doc.json 的 fails。',
               '引用只校验片段存在，不保证语义完备。background/historical 的数字不作为当前事实依据。',
               '', '| ID | Recall@5 | 引用合法 | 期望来源 | verified | 关键词 | 失败项 |',
@@ -93,8 +93,8 @@ def main():
     parser.add_argument('--offline', action='store_true')
     args = parser.parse_args()
     items = yaml.safe_load((EVAL_DIR/'doc_golden_set.yaml').read_text(encoding='utf-8'))['questions']
-    if len(items) != 15:
-        raise ValueError('文档评测必须包含固定15题')
+    if len(items) != 16:
+        raise ValueError('文档评测必须包含固定16题')
     summary, results = evaluate(items, args.offline)
     write_reports(summary, results)
     print(json.dumps(summary, ensure_ascii=False), flush=True)

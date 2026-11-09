@@ -16,3 +16,5 @@ files:
     authority: background
   - path: 项目书修订说明.md
     authority: historical
+  - path: fund-platform/docs/PPO奖励口径-最终代码.md
+    authority: authoritative
