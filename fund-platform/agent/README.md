@@ -1,8 +1,8 @@
 # 投研 AI Agent（LangGraph + RAG）
 
-## Phase 2.1（2026-11-09）
+## Phase 2.1.1（2026-11-09）
 
-已完成 PPO 权威语料、16 题文档评测、命名检索、Unicode 数值处理、真实 healthz、引用 fail-closed 与语料预检。最终真实评测时间：2026-11-09T13:47:49+08:00。
+已完成 PPO 权威语料、16 题文档评测、命名检索、Unicode 数值处理、真实 healthz、引用 fail-closed 与语料预检。最终真实评测时间：2026-11-09T20:37:03+08:00。
 阶段施工书见 [`../../AI-Agent施工书-2026-11-07.md`](../../AI-Agent施工书-2026-11-07.md)。该施工书为本地文件，不纳入本次提交。
 Phase 3 简报审核推送、Phase 4 平台集成未开始。
 
@@ -90,9 +90,10 @@ validate 区分“索引缺失”“语料缺失”和“索引过期”。每�
 
 ## 命名检索、引用与数值校验
 
-查询按大小写和空白归一化识别完整文件名、去后缀名称与明确别名。保留 BM25/FAISS/RRF；命名文档缺席时，从其片段按 BM25、同分顺序或 token 重叠选取保留位。
-保留位进入前 min(5, top_k)；多个文档保护已有保留位，结果总数不超过 top_k，并去重。
-已进入排名的命名文档使用同源前后各一块扩展，按 BM25 选择本地候选。日志包含 named_sources、named_reserved、named_neighbors。
+查询按大小写和空白归一化识别完整文件名、去后缀名称与明确别名。保留 BM25/FAISS/RRF 主排名，普通查询不改写排名。
+命名文档无论是否已进入 RRF 前列，都按整份 source 的 BM25 分数排序；同分按 chunks.jsonl 顺序。全源分数为 0 时，按不同 query token 的覆盖数排序，再按 chunk 顺序。
+单命名文档保留源内前 2 块（受 top_k 限制），进入前 min(5, top_k)。多命名文档先各保 1 块，剩余 slot 按源内候选分数分配。已在结果中的选中片段保留；补入时只替换未保护 slot，结果不超过 top_k，最后去重。
+删除了围绕错误 existing chunk 只看前后各一块的选择逻辑；本轮不使用邻块补充。日志保留 named_sources、named_reserved、named_neighbors（空列表），新增 named_reserved_chunks，逐块记录 source_name、chunk_id、section。
 单独“PPO”不是文档别名；“手册”泛称可辅助检索，但不触发强制命名来源校验。
 路由不得删掉用户点名的文档。答案先答命名文档；冲突需披露差异并说明最终以代码为准。
 
@@ -103,7 +104,10 @@ validate 区分“索引缺失”“语料缺失”和“索引过期”。每�
 共享 NFKC 处理全角数字、百分号与 Unicode 负号。数值提取区分负收益、日期、范围、二元减法和中文标点。评分使用分制，收益/回撤可用百分比；检索分数、日期和非权威事实数字不作为数字依据。
 回答总长不超过 300 字，含引用与免责声明。verified 仅检查数字、引用、拒答和长度，不保证全文语义完整。
 
-## 最终验收
+## Phase 2.1.1 验收
+
+Q14 此前未召回相关片段，并回答无法确认三类信息，属于检索/回答失败。此前将其归因于原文锚点的说明错误。
+本轮从整份命名文档保留词法前两块，不硬编码题目、章节、关键词或答案。Q14/Q15/Q16 的 golden 与原25题 golden_set.yaml 未改动。
 
 ```bash
 .venv/bin/python -m pytest -q
@@ -117,56 +121,57 @@ validate 区分“索引缺失”“语料缺失”和“索引过期”。每�
 .venv/bin/python eval/check_score_units.py
 ```
 
-- pytest 原始摘要：`91 passed, 1 warning in 11.30s`；无 skip/xfail，全部离线，无模型下载。受限环境的 TestClient 阻塞，最终使用允许本地服务的执行环境。
-- 语料预检：`corpus_ok=9`。
-- 构建：`documents=9 chunks=124 backend=hybrid`。
-- 原文核验：`golden_quotes=16/16`，逐字匹配。
-- 离线文档评测：execution=offline_fallback；Recall@5=0.9375；citation_valid_rate=1.0；expected_source_cited_rate=0.8125；keyword_coverage=0.5737704918032787；verified_rate=0.875；p50/p95=0.06/10.34s；llm_error_count=34（故意注入 offline 异常）。离线摘要结果不代表真实模型能力，日志保留在 /tmp/phase21-doc-offline.log。
+- 单测原始摘要：`97 passed, 1 warning in 10.49s`；原91项保留，无 skip/xfail，测试不下载模型。
+- 新增临时 mini corpus 回归保持 BM25 与实际 FAISS 查询；构造源内第2块在 RRF 前列之外且远离错误已有块。top_k=3/5/8 三种情况在基线代码下均失败，修复后通过。新增报告条件判定的3个用例。
+- 预检：`corpus_ok=9`。
+- 索引：`documents=9 chunks=124 backend=hybrid`。
+- 原文核验：`golden_quotes=16/16`。
+- 离线评测：execution=offline_fallback；Recall@5=1.0；引用合法率=1.0；期望来源=0.8125；关键词=0.5737704918032787；verified=0.875；llm_error_count=34（故意注入 offline 异常）。这不是实际模型表现。
 
-真实 16 题结果（2026-11-09T13:47:49+08:00，deepseek-flash）：
+真实文档评测（2026-11-09T20:37:03+08:00）：
 
 | 指标 | 结果 |
 |---|---|
 | total | 16 |
-| recall_at_5 | 0.875 |
+| recall_at_5 | 1.0 |
 | citation_valid_rate | 1.0 |
 | expected_source_cited_rate | 1.0 |
-| keyword_coverage | 0.9508196721311475 |
-| verified_rate | 0.9375 |
-| latency_p50 | 7.12 |
-| latency_p95 | 25.67 |
+| keyword_coverage | 1.0 |
+| verified_rate | 1.0 |
+| latency_p50 | 7.86 |
+| latency_p95 | 21.39 |
 | llm_error_count | 0 |
 | backend_counts | {'hybrid': 16, 'bm25': 0} |
 
 | 题目 | Recall@5 | expected_source | 关键词 | verified |
 |---|---|---|---|---|
+| Q14 | 1 | 1 | 3/3 | True |
 | Q15 | 1 | 1 | 6/6 | True |
 | Q16 | 1 | 1 | 6/6 | True |
 
-25 题真实回归（2026-11-09T13:51:38）：`25/25`；工具选择准确率=0.96；引用支持率=1.0；verified_rate=1.0；p50/p95=4.76/7.35s；llm_error_count=0。
-全部题目为指标分母；空期望工具仍按无交集计分。G03 verified=True。baseline 三个文件和原 25 题 golden_set.yaml 未改动。
+Q14 完整回答：
 
-HTTP：healthz status=ok、rag_enabled=true、backend=hybrid；tools 数量 9；Q15 包含设计四项及规则基准/夏普差异并引用强化学习.txt；Q16 包含全部系数、3bp 与 clip 并引用新文档；两题 verified=true。
-数据题返回 33.90/33.9 与“下行”，verified=true；空问题 422。连续 5+3 次原始输出：`score_unit_checks=8/8`。
-验收仅记录并关闭本次 uvicorn PID；`server_stopped=True port_8001_closed=True`。HTTP 原始记录为 /tmp/phase21-http.log（临时日志不入库）。
+> 精炼市场特征；当前资产持仓权重；组合实时净值。不构成投资建议。
+> [来源: 强化学习.txt §二、各模块详细逻辑链条（逐块拆解） / 2.2 环境核心优势总结]
 
-产物：[report_doc.md](eval/report_doc.md)、[results_doc.json](eval/results_doc.json)、[answers_doc.md](eval/answers_doc.md)、[report_agent.md](eval/report_agent.md)、[results_agent.json](eval/results_agent.json)、[answers_agent.md](eval/answers_agent.md)。JSON 均来自评测脚本，没有手工改结果。
+Q14：通过。三类信息与本轮检索到的《强化学习.txt》正确章节对应。报告区分“召回未中但关键词全中”的锚点偏差与“召回未中且关键词缺失”的检索/回答失败。
 
-## 已知限制与原有断言
+25题真实回归（2026-11-09T20:35:38）：25/25；工具选择=0.96；引用支持=1.0；verified=1.0；llm_error_count=0；p50/p95=4.19/6.94s。
 
-- Q14 Recall@5=0：golden 锚定 artifact，指定原文片段未进入前五；保留原 source_quote，不以其他同义片段替换。 本轮未命中原文锚点的题目：Q12, Q14。
-- Q10 原文问卷合计与算式矛盾，照录原文，不自行补算新合计。
-- Q13 手册原则与北向实际填零不同；Q07 原文 PMI 可用时间与实际滞后不同。规则和实际数据分开说明，实际以数据工具为准。
-- 冷启动需加载 CPU 模型；上述延迟来自本轮运行，不是稳定服务 SLA。
-- LangGraph 有一项未来默认值变更警告；本次未升级依赖。
-- Q01 同时调用市场数据工具；权重百分比触发评分单位校验。保留 verified=false，不改写结果。
-- Q01: verified=False；删除证据不支持的数值[]；仅引用tool_results，遵守拒答政策和字数限制。市场评分及分项使用分制，删除错误百分号并保留原始分数，不得改动数值。；golden评分失败项：无。
-- Q14: verified=True；无校验错误；golden评分失败项：缺少关键词 市场; 缺少关键词 持仓; 缺少关键词 净值。
+HTTP：Q14 包含市场、持仓、净值，并引用强化学习.txt 的正确章节；Q15/Q16 保持全部关键词和来源，verified=true；市场题为33.9/下行；工具9个；空问题422；healthz status=ok、rag_enabled=true、backend=hybrid。
+连续5+3次评分单位检查：`score_unit_checks=8/8`。验收进程记录在 `/tmp/agent-uvicorn-2.1.1.pid`，只关闭本次PID；`server_stopped=True port_8001_closed=True`。
+临时原始日志：`/tmp/phase211-pytest.log`、`/tmp/phase211-red.log`、`/tmp/phase211-green.log`、`/tmp/phase211-doc-offline.log`、`/tmp/phase211-doc-live.log`、`/tmp/phase211-agent-live.log`、`/tmp/phase211-http.log`。
 
-本次未改弱任何既有断言。test_api 的 rag_enabled=True 断言保留，新增 validate 成功 fixture，避免依赖用户真实索引；新增独立用例验证 degraded/ok 和错误信息清理。
-既有图测试的 offline fixture 新增 embedding 异常模拟，确保不加载/下载真实模型；既有断言保留，混合检索另由 fake encoder 测试。
-原有 57 项测试均保留；本轮合计 91 项，无 skip/xfail。
+产物：[report_doc.md](eval/report_doc.md)、[results_doc.json](eval/results_doc.json)、[answers_doc.md](eval/answers_doc.md)、[report_agent.md](eval/report_agent.md)、[results_agent.json](eval/results_agent.json)、[answers_agent.md](eval/answers_agent.md)。JSON 来自完整评测运行，未手改结果。
 
-本次指标问题额外约束使用数据工具；风险档、危机和策略主语从成功工具行保留，防止模型省略题目身份。
+## 已知限制
 
-本次仅修改 agent/ 与新增 PPO 文档。范围外四项原有未跟踪内容保留。未提交密钥、虚拟环境、索引、模型缓存和被忽略手册。未 push。
+- 本轮16题没有原文召回、关键词或校验失败项。
+- verified 只检查数字、引用、拒答和长度，不保证回答完整；关键词检查也不能替代完整语义审查。
+- 命名保留位受 top_k 限制；本轮前两块解决了Q14，未扩大至前三块。
+- 多个命名文档会占用更多保留位，可能减少其他未点名来源的片段。普通查询不改写RRF。
+- Q10 原文算式矛盾不自行补算；Q07/Q13 原文规则与实际数据不同，分开说明。
+- LangGraph 保留一项未来默认值变更警告；本轮未升级依赖。
+- 两份根目录本地专用语料仍需 fresh clone 手工补齐，预检保持 fail-closed。
+
+本轮未改弱既有断言，只新增6项参数化回归/报告测试。仅修改 agent/；保留原有四项未跟踪内容，不提交密钥、索引、模型缓存或忽略的手册。未 push。
