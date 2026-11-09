@@ -148,6 +148,34 @@ def notify(card: dict, *, chat_id: str = "", idempotency_key: str = "") -> dict:
     raise FeishuError(-1, "未配置飞书应用凭证或 Webhook URL")
 
 
+def safe_error(exc: Exception) -> str:
+    """Do not persist remote messages, request URLs or credential-bearing exceptions."""
+    return f"{type(exc).__name__}: 飞书发送失败"
+
+
+def publish_brief(card: dict, *, idempotency_key: str) -> dict:
+    """Workflow-only bounded retry; the existing CLI and notify behavior stay intact."""
+    if not settings.feishu_app_enabled and not settings.feishu_webhook_enabled:
+        return dict(status='skipped', message_id=None, error=None, attempts=0)
+    error = None
+    for attempt in range(1, 4):
+        try:
+            result = notify(card, idempotency_key=idempotency_key)
+            if result.get('code') not in (0, None) or result.get('StatusCode') not in (0, None):
+                raise FeishuError(-1, 'notification rejected')
+            message_id = result.get('data', {}).get('message_id') or result.get('message_id')
+            if settings.feishu_app_enabled and not message_id:
+                raise FeishuError(-1, 'missing message_id')
+            log.info('brief_send attempt=%s status=sent', attempt)
+            return dict(status='sent', message_id=message_id, error=None, attempts=attempt)
+        except Exception as exc:
+            error = safe_error(exc)
+            log.warning('brief_send attempt=%s status=failed error_type=%s', attempt, type(exc).__name__)
+            if attempt < 3:
+                time.sleep(0.1 * attempt)
+    return dict(status='failed', message_id=None, error=error, attempts=3)
+
+
 def build_brief_card(
     *,
     report_date: str,

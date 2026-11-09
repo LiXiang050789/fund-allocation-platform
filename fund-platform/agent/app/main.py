@@ -1,9 +1,12 @@
 """Phase 1 HTTP 问答入口。"""
 import logging
 import time
+import threading
+from contextlib import asynccontextmanager
 from uuid import uuid4
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel, field_validator
 
 from app.config import settings
@@ -14,7 +17,33 @@ from app.tools.registry import TOOL_SCHEMAS
 
 logging.basicConfig(level=settings.log_level)
 log = logging.getLogger(__name__)
-app = FastAPI(title="投研 Agent", version="1.0")
+from app.workflow import WorkflowService, WorkflowConflict, ReviewRequest, public_state
+
+_workflow_service = None
+_workflow_lock = threading.RLock()
+
+
+def get_workflow():
+    global _workflow_service
+    with _workflow_lock:
+        if _workflow_service is None:
+            _workflow_service = WorkflowService(settings)
+        return _workflow_service
+
+
+@asynccontextmanager
+async def lifespan(app):
+    global _workflow_service
+    try:
+        yield
+    finally:
+        with _workflow_lock:
+            if _workflow_service is not None:
+                _workflow_service.close()
+                _workflow_service = None
+
+
+app = FastAPI(title="投研 Agent", version="1.0", lifespan=lifespan)
 
 
 class ChatRequest(BaseModel):
@@ -69,3 +98,44 @@ def healthz():
 @app.get("/tools")
 def tools():
     return [{"name": s["function"]["name"], "description": s["function"]["description"]} for s in TOOL_SCHEMAS]
+
+
+@app.post('/workflow/run')
+def workflow_run():
+    return public_state(get_workflow().run())
+
+
+def workflow_state(thread_id):
+    try:
+        return get_workflow().get(thread_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail='未知工作流') from None
+
+
+@app.get('/workflow/{thread_id}')
+def workflow_get(thread_id: str):
+    return public_state(workflow_state(thread_id))
+
+
+@app.post('/workflow/{thread_id}/approve')
+def workflow_approve(thread_id: str, request: ReviewRequest):
+    try:
+        return public_state(get_workflow().review(thread_id, request))
+    except KeyError:
+        raise HTTPException(status_code=404, detail='未知工作流') from None
+    except WorkflowConflict:
+        raise HTTPException(status_code=409, detail='当前状态不允许该审核动作') from None
+
+
+@app.get('/workflow/{thread_id}/report')
+def workflow_report(thread_id: str):
+    state = workflow_state(thread_id)
+    if not state.get('draft'):
+        raise HTTPException(status_code=409, detail='无草稿')
+    text = state['draft']
+    if state.get('report_path'):
+        try:
+            text = (get_workflow().config.agent_dir/state['report_path']).read_text(encoding='utf-8')
+        except OSError:
+            raise HTTPException(status_code=409, detail='报告文件不可用') from None
+    return Response(content=text, media_type='text/markdown')

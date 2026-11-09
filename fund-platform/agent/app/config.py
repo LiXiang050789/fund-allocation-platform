@@ -21,7 +21,7 @@ def _flag(name: str, default: str = "0") -> bool:
 @dataclass(frozen=True)
 class Settings:
     # LLM
-    deepseek_api_key: str = field(default_factory=lambda: os.getenv("DEEPSEEK_API_KEY", ""))
+    deepseek_api_key: str = field(default_factory=lambda: os.getenv("DEEPSEEK_API_KEY", ""), repr=False)
     deepseek_base_url: str = field(
         default_factory=lambda: os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
     )
@@ -31,10 +31,10 @@ class Settings:
 
     # 飞书
     feishu_app_id: str = field(default_factory=lambda: os.getenv("FEISHU_APP_ID", ""))
-    feishu_app_secret: str = field(default_factory=lambda: os.getenv("FEISHU_APP_SECRET", ""))
-    feishu_chat_id: str = field(default_factory=lambda: os.getenv("FEISHU_CHAT_ID", ""))
-    feishu_webhook_url: str = field(default_factory=lambda: os.getenv("FEISHU_WEBHOOK_URL", ""))
-    feishu_webhook_secret: str = field(default_factory=lambda: os.getenv("FEISHU_WEBHOOK_SECRET", ""))
+    feishu_app_secret: str = field(default_factory=lambda: os.getenv("FEISHU_APP_SECRET", ""), repr=False)
+    feishu_chat_id: str = field(default_factory=lambda: os.getenv("FEISHU_CHAT_ID", ""), repr=False)
+    feishu_webhook_url: str = field(default_factory=lambda: os.getenv("FEISHU_WEBHOOK_URL", ""), repr=False)
+    feishu_webhook_secret: str = field(default_factory=lambda: os.getenv("FEISHU_WEBHOOK_SECRET", ""), repr=False)
 
     # 开关
     enable_vector_rag: bool = field(default_factory=lambda: _flag("ENABLE_VECTOR_RAG", "1"))
@@ -47,6 +47,8 @@ class Settings:
     score_path: Path = AGENT_DIR.parent / "data/clean/market_score_daily.csv"
     index_dir: Path = AGENT_DIR / "data/index"
     reports_dir: Path = AGENT_DIR / "reports"
+    checkpoint_path: Path = AGENT_DIR / "data/checkpoints.sqlite"
+    report_url_base: str = field(default_factory=lambda: os.getenv("REPORT_URL_BASE", "http://localhost:8001").rstrip("/"))
 
     @property
     def feishu_app_enabled(self) -> bool:
