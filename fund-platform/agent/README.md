@@ -251,3 +251,11 @@ SQLite真实服务重启前后同一待审草稿一致；草稿GET、市场33.90
 [运行证据](eval/phase3_evidence.md)记录真实thread、重启状态、草稿/报告hash和真实发布结果；[Phase3 Quiz](eval/phase3_quiz.md)含8题，仅题目。截图未获取。消息原生create_time未获取，发送时间记录发布完成checkpoint时间。服务关闭；未push。
 
 本次真实线程：`d5d133fed32d4961b3618c59f6a888db`；报告：`reports/2026-07-10_d5d133fed32d4961b3618c59f6a888db.md`；SHA256：`033c82af49f452e0e52840d4df097932799710908d6d5300f2dc63b79269f5e3`。`.env`按用户授权写入目标且权限600，不提交。
+
+## Phase 4：平台集成与本地部署（2026-11-10）
+
+Streamlit 平台通过独立 HTTP 客户端连接本 Agent，不导入 Agent 代码。完整架构、两进程启动命令、安全模式和 3 分钟演示脚本见 [平台 README 的 Phase 4 段](../README.md#phase-4agent-平台集成与本地部署2026-11-10)。
+
+Linux：在本目录运行 `.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8001 --workers 1`。Windows：先创建 `.venv` 并安装 `requirements.txt`，再运行 `run_agent.bat`。SQLite checkpoint 要求单 worker。平台端口 8501，`AGENT_BASE_URL` 默认 `http://127.0.0.1:8001`。
+
+页面支持工具/引用/校验展示、会话内问答历史、简报生成与人工审核、按需下载报告。聊天 thread_id 不是服务端历史记忆。无飞书配置时审核仅保存报告；本轮真实飞书推送未验证（待授权）。[Phase 4 证据](eval/phase4_evidence.md)与 [quiz](eval/phase4_quiz.md)记录本轮验收。

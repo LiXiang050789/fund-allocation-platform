@@ -265,3 +265,66 @@ cat results/backtest/baseline_metrics.csv
 ---
 
 *最后更新: 2026-11-07（评分口径统一：market_score_daily 恢复 7/28 修正版，与 market_score_clean 逐行一致；dynamic/lgb/sasf 月度权重已重生成）*
+
+## Phase 4：Agent 平台集成与本地部署（2026-11-10）
+
+```mermaid
+flowchart LR
+  UI["Streamlit :8501"] -->|HTTP| API["FastAPI Agent :8001"]
+  API --> Graph[LangGraph]
+  Graph --> Data[工具 / RAG]
+  Data --> LLM[DeepSeek]
+  Graph --> DB[SQLite checkpoint]
+  Graph --> Publish[发布节点]
+  Publish --> Feishu[飞书]
+```
+
+平台与 Agent 是两个独立进程。平台只通过 `platform/agent_client.py` 请求 Agent HTTP 接口；不导入 Agent 代码。`AGENT_BASE_URL` 默认 `http://127.0.0.1:8001`，可以配置 HTTP/HTTPS 地址。启动顺序如下。
+
+终端一（Agent，单 worker）：
+
+```bash
+cd /home/lx/农行杯/fund-platform/agent
+.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8001 --workers 1
+```
+
+终端二（平台）：
+
+```bash
+cd /home/lx/农行杯/fund-platform
+AGENT_BASE_URL=http://127.0.0.1:8001 /home/lx/miniconda3/bin/python -m streamlit run platform/app.py --server.address 127.0.0.1 --server.port 8501
+```
+
+访问 `http://127.0.0.1:8501`，进入「AI 助手」。Windows 在 Agent 目录运行 `run_agent.bat`；首次先用 Python 3.12 创建 `.venv` 并安装 `requirements.txt`。脚本前台运行 uvicorn，端口 8001，单 worker，失败时保留错误供查看。Linux 环境只能静态检查此脚本。
+
+页面默认「🎯 预制场景」。Agent 不可达时，实时问答明确提示连接失败；仍可以切回预制场景。健康检查超时 3 秒，缓存 5 秒；「检查 Agent 服务」只刷新健康检查，不清空 PPO 推理缓存。
+
+实时问答展示回答、工具轨迹、引用、数字/引用校验状态与耗时。`/chat` 的 `thread_id` 是请求标识；Agent 不持久化聊天历史。问答历史只存在当前 Streamlit 会话，切换模式时保留，结束页面会话后不保证保留。
+
+简报工作流支持生成、手动刷新、修改、驳回、审核、下载 Markdown。草稿按线程与修订号绑定；保存修改后继续待审。驳回必须填写意见。审核人必填；勾选确认后才显示可执行的发布按钮。终态隐藏审核按钮。下载只在点击时请求，不自动轮询。
+
+页面不收集模型密钥。密钥只放 `agent/.env`，Linux 权限 `600`，由 gitignore 排除。不得提交凭证、索引、checkpoint、生成报告与模型缓存。审核 API 无认证，仅供受信本机使用；SQLite checkpoint 必须单进程运行。公网部署、鉴权、Docker、定时任务与飞书回调不在本阶段范围。
+
+安全演示时，在启动 Agent 的终端显式清空五个飞书配置：
+
+```bash
+cd /home/lx/农行杯/fund-platform/agent
+FEISHU_APP_ID= FEISHU_APP_SECRET= FEISHU_CHAT_ID= \
+FEISHU_WEBHOOK_URL= FEISHU_WEBHOOK_SECRET= \
+.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8001 --workers 1
+```
+
+此模式审批后为 `saved_only`，表示报告保存，未发送飞书。本轮默认使用此模式。Phase 3 的单卡授权不适用于本轮；只有再次取得明确授权，才可以用真实配置向指定测试群发送最多一条卡片。
+
+### 3 分钟演示脚本
+
+| 时间 | 页面动作 | 讲解依据 |
+|---|---|---|
+| 0:00–0:30 | 检查服务；实时问「最新市场评分和状态」 | 按页面实时回答、工具、引用和校验结果讲解 |
+| 0:30–1:00 | 问策略对比或风险问题 | 展开工具参数与引用；按数据日期说明历史回测，不承诺收益 |
+| 1:00–1:20 | 请求保证收益 | 展示合规拒答；不写死数值 |
+| 1:20–2:00 | 生成简报；编辑并保存；填写意见后驳回一次 | 展示待审、修订号和审核历史 |
+| 2:00–2:40 | 填审核人；勾选确认；审核通过 | 安全模式展示 `saved_only` 与报告；明确未发飞书 |
+| 2:40–3:00 | 下载 Markdown；检查终态 | 仅在本轮另获单卡授权时演示真实飞书，并核对 message_id；重复审核不得再发 |
+
+验收记录见 [Phase 4 证据](agent/eval/phase4_evidence.md)，最终问答评测见 [25 题报告](agent/eval/report_agent.md)。
