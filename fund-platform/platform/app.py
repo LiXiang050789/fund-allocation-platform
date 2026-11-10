@@ -7,13 +7,18 @@ import os
 import subprocess
 import sys
 import time
+from uuid import uuid4
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-import requests
 import streamlit as st
 
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from agent_client import (AgentError, AgentHTTPError, AgentUnavailable, get_base_url,
+                          health, chat, start_workflow, get_workflow, review_workflow,
+                          get_report, safe_detail)
 
 st.set_page_config(page_title="指数基金智能配置平台", layout="wide", page_icon="📊")
 
@@ -901,18 +906,47 @@ with tab3:
 
 with tab4:
     st.header("AI 投顾助手")
+    st.session_state.setdefault("agent_thread_id", uuid4().hex)
+    st.session_state.setdefault("agent_chat_history", [])
+    st.session_state.setdefault("agent_health_nonce", 0)
 
-    ppo_info = _current_ppo_info(latest["date"])
-    if ppo_info["ok"]:
-        st.caption(f"{ppo_info['text']}（{_status_text(ppo_info)}，权重日期 {ppo_info['date'].date()}）")
-        if ppo_info.get("message"):
-            st.caption(ppo_info["message"])
-    else:
-        st.caption(ppo_info.get("message", "当前无 PPO 权重，仅基于市场评分回答。"))
+    @st.cache_data(ttl=5, show_spinner=False)
+    def _agent_health(base_url, nonce):
+        try:
+            return health(base_url=base_url, timeout=3.0)
+        except AgentError:
+            return {"status": "unavailable"}
 
-    mode = st.radio("模式", ["🎯 预制场景", "💬 实时问答 (DeepSeek)"], horizontal=True)
+    def show_agent_error(exc):
+        if isinstance(exc, AgentUnavailable):
+            st.error(f"Agent 服务未启动或不可达：{agent_base}")
+            st.caption("可切换到「🎯 预制场景」继续演示")
+        elif isinstance(exc, AgentHTTPError):
+            st.error(f"Agent 返回错误（HTTP {exc.status_code}）：{exc.detail}")
+        else:
+            st.error(str(exc))
 
+    agent_base = None
+    try:
+        agent_base = get_base_url()
+        if st.button("检查 Agent 服务"):
+            st.session_state["agent_health_nonce"] += 1
+        health_result = _agent_health(agent_base, st.session_state["agent_health_nonce"])
+        online = health_result.get("status") == "ok"
+        st.caption(f"Agent 服务：{agent_base} · {'在线' if online else '未连接'}")
+    except AgentError as exc:
+        online = False
+        show_agent_error(exc)
+
+    mode = st.radio("模式", ["🎯 预制场景", "🤖 Agent 实时问答"], horizontal=True)
     if mode == "🎯 预制场景":
+        ppo_info = _current_ppo_info(latest["date"])
+        if ppo_info["ok"]:
+            st.caption(f"{ppo_info['text']}（{_status_text(ppo_info)}，权重日期 {ppo_info['date'].date()}）")
+            if ppo_info.get("message"):
+                st.caption(ppo_info["message"])
+        else:
+            st.caption(ppo_info.get("message", "当前无 PPO 权重，仅基于市场评分回答。"))
         ppo_scene_text = f"\n\n当前 {ppo_info['text']}。" if ppo_info["ok"] else "\n\n当前无 PPO 权重，仅基于市场评分回答。"
         scenarios = {
             "😱 市场大跌怎么办": (
@@ -931,7 +965,7 @@ with tab4:
             "📅 定投还有用吗": (
                 "长期定投",
                 '定投的核心优势是"用时间分散买入成本"。\n\n'
-                '回测显示：2021 年后 1307 天震荡期，等权仅赚 10%，动态评分配置实现 33% 收益——\n"市场状态分类 + 定投纪律"在长期中显著跑赢被动持有。'
+                '策略表现请查看平台统一回测结果；历史表现不代表未来收益。结合市场状态与定投纪律，按自身风险承受能力决策。'
                 + ppo_scene_text,
             ),
         }
@@ -947,33 +981,129 @@ with tab4:
             st.markdown(f"### {title}")
             st.info(content)
     else:
-        st.caption("基于 DeepSeek API，回答中嵌入当前市场数据")
-        user_q = st.text_input("输入你的问题", placeholder="比如：现在适合加仓吗？")
-        api_key = st.text_input("DeepSeek API Key", type="password", placeholder="sk-...")
+        st.caption("页面历史仅保存在当前 Streamlit 会话；请求标识不代表服务端对话记忆。")
+        if agent_base and not online:
+            show_agent_error(AgentUnavailable())
+        user_q = st.text_input("输入你的问题", key="agent_question")
+        if st.button("发送", key="agent_send", disabled=not agent_base):
+            if not user_q.strip():
+                st.info("请输入问题")
+            else:
+                with st.spinner("思考中..."):
+                    try:
+                        answer = chat(user_q.strip(), st.session_state["agent_thread_id"], base_url=agent_base)
+                        if answer.get("error") and answer.get("answer") == "服务暂时不可用":
+                            st.error("服务暂时不可用")
+                        else:
+                            st.session_state["agent_chat_history"].append({"question": user_q.strip(), "result": answer})
+                    except AgentError as exc:
+                        show_agent_error(exc)
+        for item in st.session_state["agent_chat_history"]:
+            st.markdown(f"**问题：** {item['question']}")
+            result = item["result"]
+            st.markdown(result.get("answer", ""))
+            st.caption(f"耗时 {result.get('latency_ms', 0)/1000:.1f}s · 校验 {'通过' if result.get('verified') else '未通过'} · 会话 {result.get('thread_id', '')[:8]}")
+            if not result.get("verified"):
+                st.warning("回答未通过数字/引用校验，请核对来源。")
+            with st.expander("引用来源"):
+                if result.get("citations"):
+                    for citation in result["citations"]:
+                        st.write(citation)
+                else:
+                    st.write("无引用")
+            if result.get("tool_calls"):
+                with st.expander("工具调用"):
+                    st.table([{"工具": call.get("name", ""),
+                               "参数": json.dumps(call.get("args", {}), ensure_ascii=False),
+                               "状态": "成功" if call.get("ok") else "失败"}
+                              for call in result["tool_calls"]])
 
-        if st.button("发送", use_container_width=True) and user_q and api_key:
-            system_prompt = f"""你是一个智能投顾助手，为工行客户提供资产配置建议。
-当前市场环境: 评分 {latest['total_score']:.0f}/100，状态 {latest['market_state']}。
-估值{latest['val_score']:.0f}/25，宏观{latest['macro_score']:.0f}/25，情绪{latest['sent_score']:.0f}/20，趋势{latest['trend_score']:.0f}/30。
-{ppo_info['text'] if ppo_info['ok'] else '无 PPO 权重，仅基于市场评分回答。'}
-资产池: 沪深300/中证500/科创50/消费/芯片/黄金/十年国债 (7只ETF)。
-策略: 动态评分配置(年化19.8%/-16.5%回撤)，LGB融合(年化12.4%/夏普0.66)。
-回答要简洁专业，不生成具体投资建议。"""
-            with st.spinner("思考中..."):
+    st.divider()
+    st.subheader("投研简报工作流")
+    if st.button("生成简报", key="workflow_run", disabled=not agent_base):
+        try:
+            with st.spinner("生成简报中..."):
+                st.session_state["workflow_state"] = start_workflow(base_url=agent_base)
+                st.session_state["workflow_publish_confirm"] = False
+        except AgentError as exc:
+            show_agent_error(exc)
+    state = st.session_state.get("workflow_state", {})
+    if st.button("刷新状态", key="workflow_refresh", disabled=not (agent_base and state.get("thread_id"))):
+        try:
+            state = get_workflow(state["thread_id"], base_url=agent_base)
+            st.session_state["workflow_state"] = state
+        except AgentError as exc:
+            show_agent_error(exc)
+    if state:
+        labels = {"awaiting_review": "待审核", "published": "已发布", "saved_only": "已保存（未配置飞书）",
+                  "publish_failed": "发布失败（报告已保存）", "rejected": "已驳回终止", "failed": "生成失败"}
+        thread = state["thread_id"]
+        status = state["status"]
+        revision = state.get("revision", 0)
+        st.write(f"线程 {thread[:8]} · 报告日期 {state.get('report_date')} · 状态 {labels.get(status, status)} · 修订号 {revision}")
+        st.caption(f"thread_id：{thread} · 更新时间：{state.get('updated_at', '')}")
+        notice = st.session_state.pop("workflow_notice", None)
+        if notice:
+            st.success(notice)
+        publish = state.get("publish", {})
+        if status == "failed":
+            st.error(safe_detail(state.get("error")))
+        if status == "saved_only":
+            st.success("未配置飞书，报告已保存")
+        elif status == "published":
+            st.success("已发布")
+        elif status == "publish_failed":
+            st.error("报告已保存，飞书发送失败，可重试")
+            st.error(safe_detail(publish.get("error")))
+        if status in {"published", "saved_only"}:
+            st.caption(f"message_id：{publish.get('message_id')}")
+            if state.get("duplicate"):
+                st.info("duplicate=true · 已发布，未重复发送")
+        draft = ""
+        if state.get("draft"):
+            draft = st.text_area("简报草稿", value=state["draft"], height=420,
+                                 key=f"workflow_draft_{thread}_{revision}_{status}", disabled=status != "awaiting_review")
+        if status in {"awaiting_review", "publish_failed"}:
+            reviewer = st.text_input("审核人", key="workflow_reviewer")
+            comment = st.text_input("审核意见（驳回必填）", key="workflow_comment")
+            action = None
+            if status == "awaiting_review":
+                if st.button("保存修改并继续审核", disabled=not (reviewer.strip() and draft.strip())):
+                    action = "edit"
+                if st.button("驳回", disabled=not (reviewer.strip() and comment.strip())):
+                    action = "reject"
+            confirm = st.checkbox("我确认向已授权飞书群发送（如已配置）", key="workflow_publish_confirm")
+            if st.button("审核通过并发布", disabled=not (reviewer.strip() and confirm)):
+                action = "approve"
+            if action:
                 try:
-                    resp = requests.post(
-                        "https://api.deepseek.com/v1/chat/completions",
-                        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                        json={"model": "deepseek-chat", "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_q}], "max_tokens": 500, "temperature": 0.7},
-                        timeout=15,
-                    )
-                    if resp.status_code == 200:
-                        st.success(resp.json()["choices"][0]["message"]["content"])
-                    else:
-                        st.error(f"API错误: {resp.status_code} — {resp.text[:200]}")
-                except Exception as e:
-                    st.error(f"请求失败: {e}")
-                    st.info('💡 可切换到"预制场景"模式体验')
+                    updated = review_workflow(thread, action, reviewer.strip(), comment.strip(),
+                                              draft if action == "edit" else "", base_url=agent_base)
+                    st.session_state["workflow_state"] = updated
+                    if action == "edit":
+                        st.session_state["workflow_notice"] = f"修订号 +1：{updated['revision']}，继续审核"
+                    st.rerun()
+                except AgentError as exc:
+                    show_agent_error(exc)
+        st.markdown("**审核历史**")
+        history = state.get("review_history", [])
+        if history:
+            st.table([{"动作": h.get("action"), "审核人": h.get("reviewer"), "意见": h.get("comment"),
+                       "时间": h.get("at"), "修订号": h.get("revision")} for h in history])
+        else:
+            st.write("暂无")
+        if state.get("draft"):
+            report_key = (thread, revision, status, state.get("updated_at"))
+            if st.button("下载当前报告/草稿"):
+                try:
+                    st.session_state["workflow_report"] = (report_key, get_report(thread, base_url=agent_base))
+                except AgentError as exc:
+                    show_agent_error(exc)
+            report = st.session_state.get("workflow_report")
+            if report and report[0] == report_key:
+                st.download_button("下载 Markdown", data=report[1].encode("utf-8"),
+                                   file_name=f"brief_{state.get('report_date') or 'draft'}_{thread[:8]}.md",
+                                   mime="text/markdown", on_click="ignore")
 
 
 with tab5:
