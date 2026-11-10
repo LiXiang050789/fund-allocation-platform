@@ -264,7 +264,7 @@ cat results/backtest/baseline_metrics.csv
 
 ---
 
-*最后更新: 2026-11-07（评分口径统一：market_score_daily 恢复 7/28 修正版，与 market_score_clean 逐行一致；dynamic/lgb/sasf 月度权重已重生成）*
+*评分口径最后更新: 2026-11-07（market_score_daily 恢复 7/28 修正版，与 market_score_clean 逐行一致；dynamic/lgb/sasf 月度权重已重生成）*
 
 ## Phase 4：Agent 平台集成与本地部署（2026-11-10）
 

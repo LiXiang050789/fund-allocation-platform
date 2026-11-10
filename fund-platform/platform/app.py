@@ -1056,9 +1056,12 @@ with tab4:
             st.error("报告已保存，飞书发送失败，可重试")
             st.error(safe_detail(publish.get("error")))
         if status in {"published", "saved_only"}:
-            st.caption(f"message_id：{publish.get('message_id')}")
+            message_id = publish.get("message_id")
+            if message_id:
+                st.caption(f"message_id：{message_id}")
             if state.get("duplicate"):
-                st.info("duplicate=true · 已发布，未重复发送")
+                st.info("duplicate=true · 已发布，未重复发送" if status == "published"
+                        else "duplicate=true · 已保存，未重复处理")
         draft = ""
         if state.get("draft"):
             draft = st.text_area("简报草稿", value=state["draft"], height=420,
