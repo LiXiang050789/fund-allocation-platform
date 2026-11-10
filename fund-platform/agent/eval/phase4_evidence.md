@@ -3,7 +3,7 @@
 ## 范围与版本
 
 本轮基于 `master=origin/master=bea8a451832320f3c7511035b77e6563d2c23e11`。
-平台/客户端提交 `789b3487`；部署文档提交 `3fecf85f`。未 push。
+平台/客户端提交 `789b3487`；部署文档提交 `3fecf85f`；验收修复提交 `11063446`（`saved_only` 的 message_id 展示、README 日期层级）。真实飞书单卡验收与最终 25 题复跑在修复后执行。未 push。
 日期为 Asia/Shanghai 本地时间。系统为 Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.35。
 Agent Python 3.12.6；平台 Python 3.13.11；Streamlit 1.60.0；FastAPI 0.162.1；uvicorn 0.54.0；LangGraph 0.3.34；langgraph-checkpoint-sqlite 2.0.11。
 真实模型为 deepseek-flash，沿用既有授权。未修改 Agent 源码、工具、RAG 算法、校验器、golden set、评测脚本与既有测试断言。
@@ -312,7 +312,51 @@ SHA256：`36da65902cdaa6257701c2ab268c5e515675b427dd73dd4b50333893efecdcda`。
 ```
 
 重复请求的审核历史与报告哈希保持相同。页面终态隐藏审核按钮。
-**真实飞书推送未验证（待授权）。** message_id 为 null，逻辑发送尝试数为 0。saved_only 只证明保存报告，不证明飞书发送成功。本轮未复用 Phase 3 单卡授权。
+安全模式未发生真实飞书发送。message_id 为 null，逻辑发送尝试数为 0。saved_only 只证明保存报告，不证明飞书发送成功。本轮未复用 Phase 3 单卡授权；授权后的独立单卡发送见下节。
+
+## 真实飞书单卡验收（2026-11-10 授权后）
+
+用户在本轮验收后明确授权再发 1 条卡片。发送前以只读接口核对机器人所在群：共 1 个群，名称「小波❤小蛙」，与 `FEISHU_CHAT_ID` 一致；未向其他群发卡。
+
+启动命令与安全模式相同，但不显式清空飞书变量，由 `agent/.env` 提供配置。`/healthz` 为 `status=ok`、`rag_backend=hybrid`。索引在 README 修复后已重建：发送时为 `documents=9 chunks=128 backend=hybrid`，`corpus_ok=9`；写入本节后最终复跑前重建为 129 块。
+
+工作流线程：`d74b1d9a876a4de0969c22ea801b6d8c`。报告日期：`2026-07-10`。流程为生成 → 待审（revision 0）→ 审核通过。
+
+审批原始结果的关键字段：
+
+```json
+{
+  "status": "published",
+  "revision": 0,
+  "publish": {
+    "status": "sent",
+    "message_id": "om_x100b601830f150a8b4f860c0b35e038",
+    "error": null,
+    "attempts": 1
+  }
+}
+```
+
+服务日志只有一条发送记录：`brief_send attempt=1 status=sent`。未发生重试或多发。
+
+报告路径：`agent/reports/2026-07-10_d74b1d9a876a4de0969c22ea801b6d8c.md`。报告 SHA256：`5f818f68c789b0d03fc99f41b6ad611643bb980fab97f5e42b0691b03c80bbfd`（3785 bytes）。落盘文件与 HTTP 下载内容哈希相同。
+
+重复 approve 原始摘要：
+
+```json
+{
+  "status": "published",
+  "duplicate": true,
+  "publish": {
+    "status": "sent",
+    "message_id": "om_x100b601830f150a8b4f860c0b35e038",
+    "error": null,
+    "attempts": 1
+  }
+}
+```
+
+重复请求的 message_id、publish 结果与 updated_at 均未变化；未新增发送日志。
 
 ## 真实浏览器 golden path
 
@@ -360,7 +404,7 @@ HF_HUB_OFFLINE=1 FEISHU_APP_ID= FEISHU_APP_SECRET= FEISHU_CHAT_ID= FEISHU_WEBHOO
 原始摘要：
 
 ```text
-documents=9 chunks=128 backend=hybrid
+documents=9 chunks=129 backend=hybrid
 corpus_ok=9
 Q01 PASS ... Q16 PASS
 golden_quotes=16/16
@@ -369,17 +413,19 @@ golden_quotes=16/16
 产物：results_agent.json / report_agent.md / answers_agent.md
 ```
 
+上列为修复后的最终复跑（15:59:29）。`chunks=129` 因 README 新增真实飞书段落；修复前为 128 时分块。本轮另有 13:45 与 14:41 两次 25/25 复跑，结论一致。
+
 模型 deepseek-flash；执行方式 configured_llm。评测输出时间是脚本生成报告的本地时间，不是 UTC。摘要：
 
 ```json
 {
   "mode": "agent",
-  "run_at": "2026-11-10T13:45:48",
+  "run_at": "2026-11-10T15:59:29",
   "total": 25,
   "pass": 25,
   "accuracy": 1.0,
-  "latency_p50": 4.97,
-  "latency_p95": 6.29,
+  "latency_p50": 4.14,
+  "latency_p95": 20.13,
   "citation_support_rate": 1.0,
   "tool_selection_accuracy": 0.96,
   "verified_rate": 1.0,
@@ -388,6 +434,8 @@ golden_quotes=16/16
   "execution": "configured_llm"
 }
 ```
+
+p95 高于前两次，原因是 G04 单题耗时 51.58s 与 X01 20.13s；25 题全部通过，LLM 错误数为 0。本次未改模型、提示词或工具。
 
 产物：[最终报告](report_agent.md)、[25 题答案](answers_agent.md)、[机器结果](results_agent.json)。引用支持率按成功工具 source 路径统计，不代表全文语义核验。
 
@@ -405,7 +453,7 @@ e268d8c550014081104b42b62da61919e869d5be4d4be5375e4a40bb35e5a83b  results_doc.js
 - 本轮只提交指定 Phase 4 文件；不提交 .env、索引、SQLite、reports、截图、模型缓存和用户未跟踪目录。
 - 前端问答历史只存在页面会话；刷新健康检查不清空 PPO 缓存。
 - 审核 API 无认证，仅供受信本机。SQLite 仅单进程。公网、Docker、定时任务和回调未验证，均在范围外。
-- 真实飞书推送未验证（待授权）；Windows 仅静态检查。截图中的部分 emoji 缺字体，中文与关键指标可读。
+- 真实飞书单卡已验证（见「真实飞书单卡验收」）；Windows 仅静态检查。截图中的部分 emoji 缺字体，中文与关键指标可读。
 - Streamlit 现有 use_container_width 有弃用提示；未扩大修改其他 tab。
 - [Phase 4 Quiz](phase4_quiz.md) 含 8 题，仅题目。
 
@@ -413,8 +461,9 @@ e268d8c550014081104b42b62da61919e869d5be4d4be5375e4a40bb35e5a83b  results_doc.js
 
 ## 最终状态
 
-检查时间：`2026-11-10T13:54:22.746945+08:00`。
-Agent PID 18892 与 Streamlit PID 19001 收到 SIGINT 并退出。
+首次检查时间：`2026-11-10T13:54:22.746945+08:00`。Agent PID 18892 与 Streamlit PID 19001 收到 SIGINT 并退出。
+
+真实飞书单卡与最终复跑后再次关闭服务。检查时间：`2026-11-10T16:17:25+08:00`。8001/8501 均无监听，无 uvicorn 进程。
 
 ```text
 {"8001": "connection_refused_and_reusable_bind_ok", "8501": "connection_refused_and_reusable_bind_ok"}

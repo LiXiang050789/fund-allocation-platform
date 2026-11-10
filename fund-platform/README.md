@@ -316,6 +316,8 @@ FEISHU_WEBHOOK_URL= FEISHU_WEBHOOK_SECRET= \
 
 此模式审批后为 `saved_only`，表示报告保存，未发送飞书。本轮默认使用此模式。Phase 3 的单卡授权不适用于本轮；只有再次取得明确授权，才可以用真实配置向指定测试群发送最多一条卡片。
 
+2026-11-10 经用户再次授权，向唯一测试群「小波❤小蛙」真实发送 1 条卡片。线程 `d74b1d9a876a4de0969c22ea801b6d8c`，状态 `published`，message_id `om_x100b601830f150a8b4f860c0b35e038`，发送尝试 1 次。重复 approve 返回 `duplicate=true`，message_id 不变，未重发。
+
 ### 3 分钟演示脚本
 
 | 时间 | 页面动作 | 讲解依据 |
@@ -328,3 +330,5 @@ FEISHU_WEBHOOK_URL= FEISHU_WEBHOOK_SECRET= \
 | 2:40–3:00 | 下载 Markdown；检查终态 | 仅在本轮另获单卡授权时演示真实飞书，并核对 message_id；重复审核不得再发 |
 
 验收记录见 [Phase 4 证据](agent/eval/phase4_evidence.md)，最终问答评测见 [25 题报告](agent/eval/report_agent.md)。
+
+*文档最后更新: 2026-11-10（Phase 4：平台 Agent 集成、本地验收与真实飞书单卡验收）*
