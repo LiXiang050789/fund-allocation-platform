@@ -299,9 +299,9 @@ AGENT_BASE_URL=http://127.0.0.1:8001 /home/lx/miniconda3/bin/python -m streamlit
 
 页面默认「🎯 预制场景」。Agent 不可达时，实时问答明确提示连接失败；仍可以切回预制场景。健康检查超时 3 秒，缓存 5 秒；「检查 Agent 服务」只刷新健康检查，不清空 PPO 推理缓存。
 
-实时问答展示回答、工具轨迹、引用、数字/引用校验状态与耗时。`/chat` 的 `thread_id` 是请求标识；Agent 不持久化聊天历史。问答历史只存在当前 Streamlit 会话，切换模式时保留，结束页面会话后不保证保留。
+实时问答展示回答、工具轨迹、引用、数字/引用校验状态与耗时。问答记录在上，输入框在下；发送后页面自动刷新。回答正文不重复展示数据来源与引用标记，引用仍保留在「引用来源」折叠面板。`/chat` 的 `thread_id` 是请求标识；Agent 不持久化聊天历史。问答历史只存在当前 Streamlit 会话，切换模式时保留，结束页面会话后不保证保留。
 
-简报工作流支持生成、手动刷新、修改、驳回、审核、下载 Markdown。草稿按线程与修订号绑定；保存修改后继续待审。驳回必须填写意见。审核人必填；勾选确认后才显示可执行的发布按钮。终态隐藏审核按钮。下载只在点击时请求，不自动轮询。
+简报工作流支持生成、手动刷新、修改、驳回、审核、下载 Markdown。草稿按线程与修订号绑定；保存修改后继续待审。点击「保存修改并继续审核」或「驳回」后，在弹窗填写审核意见；驳回必须填写。审核人必填；勾选确认后才显示可执行的发布按钮。终态隐藏审核按钮。「下载当前报告/草稿」直接下载 Markdown，不再二次请求。
 
 页面不收集模型密钥。密钥只放 `agent/.env`，Linux 权限 `600`，由 gitignore 排除。不得提交凭证、索引、checkpoint、生成报告与模型缓存。审核 API 无认证，仅供受信本机使用；SQLite checkpoint 必须单进程运行。公网部署、鉴权、Docker、定时任务与飞书回调不在本阶段范围。
 
@@ -315,6 +315,18 @@ AGENT_FEISHU_DISABLED=1 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8
 Windows 等价命令为 `run_agent.bat safe`。开关在配置层同时关闭应用机器人和 Webhook，审批结果为 `saved_only`（`publish.status=skipped`），不发起飞书网络请求，CLI `--send` 也会被拒绝。不得用 `$env:FEISHU_APP_ID=''` 禁用：PowerShell 会删除变量，`.env` 随后被回填，可能真实发送。默认演示使用安全模式；只有再次取得明确授权，才可以用真实配置向指定测试群发送最多一条卡片。
 
 报告按 UTF-8 + LF 字节落盘，`/workflow/{thread_id}/report` 按字节返回同一文件；Windows 下载报告的 SHA256 与 `report_sha256` 一致。
+
+### 发送简报到飞书
+
+平台不提供群选择。目标群由 Agent 的 `.env` 中 `FEISHU_CHAT_ID` 决定，机器人必须已在该群内。
+
+1. `.env` 填写 `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_CHAT_ID`；确认 `AGENT_FEISHU_DISABLED` 未设为 `1`。
+2. 用普通模式启动 Agent。Windows 运行 `run_agent.bat`（不加 `safe`）；Linux 运行 uvicorn 时不设置 `AGENT_FEISHU_DISABLED`。
+3. 平台生成简报 → 填写审核人 → 勾选「我确认向已授权飞书群发送（如已配置）」→ 点击「审核通过并发布」。
+4. 成功后状态为「已发布」，页面显示 `message_id`；重复审批返回 `duplicate=true`，不重发。通知失败为 `publish_failed`，报告仍保存，可再次审批重试。
+5. 安全模式或凭证未配置时，状态为「已保存（未发送飞书）」，不发起飞书请求。
+
+更换目标群只改 `.env` 的 `FEISHU_CHAT_ID`，然后重启 Agent。不要用清空环境变量的方式禁用发送。
 
 2026-11-10 经用户再次授权，向唯一测试群「小波❤小蛙」真实发送 1 条卡片。线程 `d74b1d9a876a4de0969c22ea801b6d8c`，状态 `published`，message_id `om_x100b601830f150a8b4f860c0b35e038`，发送尝试 1 次。重复 approve 返回 `duplicate=true`，message_id 不变，未重发。
 

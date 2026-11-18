@@ -4,6 +4,7 @@ Streamlit 前端 — 市场仪表盘 / 自动化数据流水线 / 配置推荐 /
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -18,7 +19,7 @@ import streamlit as st
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agent_client import (AgentError, AgentHTTPError, AgentUnavailable, get_base_url,
                           health, chat, start_workflow, get_workflow, review_workflow,
-                          get_report, safe_detail)
+                          safe_detail)
 
 st.set_page_config(page_title="指数基金智能配置平台", layout="wide", page_icon="📊")
 
@@ -54,6 +55,43 @@ ETF_CN = {
     "bond10": "十年国债",
 }
 format_dict = {"年化收益": "{:.1%}", "最大回撤": "{:.1%}", "夏普比率": "{:.2f}", "卡玛比率": "{:.2f}", "月均换手率": "{:.1%}", "年化收益/最大回撤": "{:.2f}"}
+
+_CITATION_RE = re.compile(r"\[(?:source|来源):[^\]]*\]")
+_SOURCE_LINE_RE = re.compile(r"(?:数据来源|数据依据|数据出处)[：:][^。\n]*。?")
+
+
+def display_answer(answer):
+    """答案正文不重复引用与数据来源；引用仍保留在「引用来源」面板。"""
+    text = _CITATION_RE.sub("", answer or "")
+    text = _SOURCE_LINE_RE.sub("", text)
+    return re.sub(r"[ \t]{2,}", " ", text).strip()
+
+
+@st.dialog("填写审核意见")
+def review_comment_dialog(action, thread, reviewer, draft, agent_base):
+    required = action == "reject"
+    comment = st.text_area("审核意见（驳回必填）" if required else "审核意见（可选）",
+                           key=f"workflow_dialog_comment_{thread}_{action}")
+    if st.button("确认", key=f"workflow_dialog_confirm_{thread}_{action}", type="primary"):
+        if required and not comment.strip():
+            st.error("驳回必须填写审核意见")
+            return
+        try:
+            updated = review_workflow(thread, action, reviewer.strip(), comment.strip(),
+                                      draft if action == "edit" else "", base_url=agent_base)
+        except AgentUnavailable:
+            st.error(f"Agent 服务未启动或不可达：{agent_base}")
+            return
+        except AgentHTTPError as exc:
+            st.error(f"Agent 返回错误（HTTP {exc.status_code}）：{exc.detail}")
+            return
+        except AgentError as exc:
+            st.error(str(exc))
+            return
+        st.session_state["workflow_state"] = updated
+        if action == "edit":
+            st.session_state["workflow_notice"] = f"修订号 +1：{updated['revision']}，继续审核"
+        st.rerun()
 
 
 def resolve_ppo_python():
@@ -984,24 +1022,10 @@ with tab4:
         st.caption("页面历史仅保存在当前 Streamlit 会话；请求标识不代表服务端对话记忆。")
         if agent_base and not online:
             show_agent_error(AgentUnavailable())
-        user_q = st.text_input("输入你的问题", key="agent_question")
-        if st.button("发送", key="agent_send", disabled=not agent_base):
-            if not user_q.strip():
-                st.info("请输入问题")
-            else:
-                with st.spinner("思考中..."):
-                    try:
-                        answer = chat(user_q.strip(), st.session_state["agent_thread_id"], base_url=agent_base)
-                        if answer.get("error") and answer.get("answer") == "服务暂时不可用":
-                            st.error("服务暂时不可用")
-                        else:
-                            st.session_state["agent_chat_history"].append({"question": user_q.strip(), "result": answer})
-                    except AgentError as exc:
-                        show_agent_error(exc)
         for item in st.session_state["agent_chat_history"]:
             st.markdown(f"**问题：** {item['question']}")
             result = item["result"]
-            st.markdown(result.get("answer", ""))
+            st.markdown(display_answer(result.get("answer", "")))
             st.caption(f"耗时 {result.get('latency_ms', 0)/1000:.1f}s · 校验 {'通过' if result.get('verified') else '未通过'} · 会话 {result.get('thread_id', '')[:8]}")
             if not result.get("verified"):
                 st.warning("回答未通过数字/引用校验，请核对来源。")
@@ -1017,6 +1041,22 @@ with tab4:
                                "参数": json.dumps(call.get("args", {}), ensure_ascii=False),
                                "状态": "成功" if call.get("ok") else "失败"}
                               for call in result["tool_calls"]])
+        st.divider()
+        user_q = st.text_input("输入你的问题", key="agent_question")
+        if st.button("发送", key="agent_send", disabled=not agent_base):
+            if not user_q.strip():
+                st.info("请输入问题")
+            else:
+                with st.spinner("思考中..."):
+                    try:
+                        answer = chat(user_q.strip(), st.session_state["agent_thread_id"], base_url=agent_base)
+                        if answer.get("error") and answer.get("answer") == "服务暂时不可用":
+                            st.error("服务暂时不可用")
+                        else:
+                            st.session_state["agent_chat_history"].append({"question": user_q.strip(), "result": answer})
+                            st.rerun()
+                    except AgentError as exc:
+                        show_agent_error(exc)
 
     st.divider()
     st.subheader("投研简报工作流")
@@ -1035,7 +1075,7 @@ with tab4:
         except AgentError as exc:
             show_agent_error(exc)
     if state:
-        labels = {"awaiting_review": "待审核", "published": "已发布", "saved_only": "已保存（未配置飞书）",
+        labels = {"awaiting_review": "待审核", "published": "已发布", "saved_only": "已保存（未发送飞书）",
                   "publish_failed": "发布失败（报告已保存）", "rejected": "已驳回终止", "failed": "生成失败"}
         thread = state["thread_id"]
         status = state["status"]
@@ -1049,7 +1089,7 @@ with tab4:
         if status == "failed":
             st.error(safe_detail(state.get("error")))
         if status == "saved_only":
-            st.success("未配置飞书，报告已保存")
+            st.success("报告已保存，飞书未发送")
         elif status == "published":
             st.success("已发布")
         elif status == "publish_failed":
@@ -1068,23 +1108,16 @@ with tab4:
                                  key=f"workflow_draft_{thread}_{revision}_{status}", disabled=status != "awaiting_review")
         if status in {"awaiting_review", "publish_failed"}:
             reviewer = st.text_input("审核人", key="workflow_reviewer")
-            comment = st.text_input("审核意见（驳回必填）", key="workflow_comment")
-            action = None
             if status == "awaiting_review":
                 if st.button("保存修改并继续审核", disabled=not (reviewer.strip() and draft.strip())):
-                    action = "edit"
-                if st.button("驳回", disabled=not (reviewer.strip() and comment.strip())):
-                    action = "reject"
+                    review_comment_dialog("edit", thread, reviewer, draft, agent_base)
+                if st.button("驳回", disabled=not reviewer.strip()):
+                    review_comment_dialog("reject", thread, reviewer, draft, agent_base)
             confirm = st.checkbox("我确认向已授权飞书群发送（如已配置）", key="workflow_publish_confirm")
             if st.button("审核通过并发布", disabled=not (reviewer.strip() and confirm)):
-                action = "approve"
-            if action:
                 try:
-                    updated = review_workflow(thread, action, reviewer.strip(), comment.strip(),
-                                              draft if action == "edit" else "", base_url=agent_base)
+                    updated = review_workflow(thread, "approve", reviewer.strip(), "", "", base_url=agent_base)
                     st.session_state["workflow_state"] = updated
-                    if action == "edit":
-                        st.session_state["workflow_notice"] = f"修订号 +1：{updated['revision']}，继续审核"
                     st.rerun()
                 except AgentError as exc:
                     show_agent_error(exc)
@@ -1096,17 +1129,10 @@ with tab4:
         else:
             st.write("暂无")
         if state.get("draft"):
-            report_key = (thread, revision, status, state.get("updated_at"))
-            if st.button("下载当前报告/草稿"):
-                try:
-                    st.session_state["workflow_report"] = (report_key, get_report(thread, base_url=agent_base))
-                except AgentError as exc:
-                    show_agent_error(exc)
-            report = st.session_state.get("workflow_report")
-            if report and report[0] == report_key:
-                st.download_button("下载 Markdown", data=report[1].encode("utf-8"),
-                                   file_name=f"brief_{state.get('report_date') or 'draft'}_{thread[:8]}.md",
-                                   mime="text/markdown", on_click="ignore")
+            st.download_button("下载当前报告/草稿", data=state["draft"].encode("utf-8"),
+                               file_name=f"brief_{state.get('report_date') or 'draft'}_{thread[:8]}.md",
+                               mime="text/markdown", on_click="ignore",
+                               key=f"workflow_download_{thread}_{revision}_{status}")
 
 
 with tab5:
