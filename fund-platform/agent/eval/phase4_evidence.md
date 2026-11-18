@@ -453,7 +453,7 @@ e268d8c550014081104b42b62da61919e869d5be4d4be5375e4a40bb35e5a83b  results_doc.js
 - 本轮只提交指定 Phase 4 文件；不提交 .env、索引、SQLite、reports、截图、模型缓存和用户未跟踪目录。
 - 前端问答历史只存在页面会话；刷新健康检查不清空 PPO 缓存。
 - 审核 API 无认证，仅供受信本机。SQLite 仅单进程。公网、Docker、定时任务和回调未验证，均在范围外。
-- 真实飞书单卡已验证（见「真实飞书单卡验收」）；Windows 仅静态检查。截图中的部分 emoji 缺字体，中文与关键指标可读。
+- 真实飞书单卡已验证（见「真实飞书单卡验收」）；Windows 当时仅静态检查，2026-11-18 已实机复验（见「Phase 4.1」）。截图中的部分 emoji 缺字体，中文与关键指标可读。
 - Streamlit 现有 use_container_width 有弃用提示；未扩大修改其他 tab。
 - [Phase 4 Quiz](phase4_quiz.md) 含 8 题，仅题目。
 
@@ -471,3 +471,45 @@ State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess
 ```
 
 8001/8501 均无监听，连接拒绝；使用 SO_REUSEADDR 的重绑定通过。普通 bind 曾受 TCP TIME_WAIT 影响返回 EADDRINUSE；未将其误报为仍有服务监听。SQLite 正常关闭，wal/shm 临时文件随连接关闭消失。未 push。
+
+## Phase 4.1：Windows 安全模式复验（2026-11-18）
+
+本轮修复三处，并只在 Windows 安全模式复验，未发送飞书卡片。
+
+### 修复
+
+1. 安全开关：新增 `AGENT_FEISHU_DISABLED`。启用后 `feishu_app_enabled` 与 `feishu_webhook_enabled` 均为 false，`publish_brief` 直接返回 `skipped`，`notify` 也拒绝直接调用。`run_agent.bat safe` 显式设置该变量。根因：PowerShell 中 `$env:FEISHU_APP_ID=''` 等于删除变量，`load_dotenv` 会从 `.env` 回填凭证，2026-11-10 的“安全模式”因此真实发送了一条卡片。
+2. 报告字节一致：`atomic_save` 改用 `write_bytes`，报告固定为 UTF-8 + LF；`/workflow/{thread_id}/report` 对已落盘报告用 `read_bytes` 按字节返回。根因：Windows 文本模式写入 CRLF，读取时归一化为 LF，落盘 SHA256 与下载 SHA256 不一致。
+3. Windows 安装：新增 `setup_windows.bat`，创建 `.venv`，过滤无 Windows 轮子的 `uvloop`；`setup_windows.bat rag` 从 PyTorch CPU 索引安装 RAG 依赖。文档补充 `HF_HUB_OFFLINE=1` 离线构建和安全启动命令。
+
+批处理首次启动失败：LF 换行加 UTF-8 中文注释被 cmd.exe 括号块拆行，出现 `'ows.bat'`、`'量在'` 误执行。改为 ASCII + CRLF 后通过；未知参数实测输出用法并退出码 2。
+
+### 证明
+
+Linux 单测：`.venv/bin/python -m pytest -q` → `135 passed, 1 warning in 19.25s`。新增安全开关覆盖、直接 notify 拒绝、配置层开关三项断言；报告接口断言响应字节等于落盘字节、SHA256 等于 `report_sha256`、无 CRLF。
+
+Windows 实机（`O:\fund-allocation-platform`，HEAD `1e9f34f`）：
+
+```text
+setup_windows.bat                      exit=0
+uvloop                                 None（未安装）
+RAG index rebuild                      documents=9 chunks=129 backend=hybrid
+run_agent.bat safe                     Uvicorn running on http://127.0.0.1:8001
+GET /healthz                           200 status=ok rag_enabled=true rag_backend=hybrid
+GET /tools                             200，9 个工具
+POST /chat                             200 verified=true citations=1，4.9s
+POST /workflow/run                     200 awaiting_review
+POST /workflow/{id}/approve            200 saved_only
+publish                                status=skipped message_id=null attempts=0
+重复 approve                           duplicate=true，仍为 skipped/0
+GET /workflow/{id}/report             200，3761 字节，CRLF=0
+report_sha256（状态/落盘/下载）        2d8a0fee4ee3949fa6924b309c4f5e74ca4df9edbb56f2db4294928881507be0
+server2.log                            第 4 行安全模式横幅；第 33 行 reason=disabled；无 status=sent
+```
+
+线程：`4eea0ff79cb74d0aa52e4983f29b6b21`；报告：`reports\2026-07-10_4eea0ff79cb74d0aa52e4983f29b6b21.md`。
+
+验收脚本 23 项全部 PASS，摘要文件：`O:\fund-allocation-platform\_win_acceptance\safe_20261118\acceptance_summary.json`（本地产物，不入库）。停止：`taskkill /PID 34820 /T /F`（子进程 8504 一并退出）；`netstat -ano | findstr :8001` 无结果，无残留 uvicorn 进程。
+
+安全模式证据：`publish.status=skipped`、`message_id=null`、`attempts=0`，且服务日志无发送尝试；本轮没有向任何群发送卡片。
+
