@@ -138,6 +138,9 @@ def send_webhook_card(card: dict) -> dict:
 
 def notify(card: dict, *, chat_id: str = "", idempotency_key: str = "") -> dict:
     """统一出口：应用机器人 → Webhook → 抛错。"""
+    if settings.feishu_disabled:
+        # CLI --send 也必须受安全模式约束，不能只依赖 workflow 的提前返回。
+        raise FeishuError(-1, "安全模式已启用，已拒绝飞书发送")
     if settings.feishu_app_enabled:
         target = chat_id or settings.feishu_chat_id
         if not target:
@@ -156,6 +159,8 @@ def safe_error(exc: Exception) -> str:
 def publish_brief(card: dict, *, idempotency_key: str) -> dict:
     """Workflow-only bounded retry; the existing CLI and notify behavior stay intact."""
     if not settings.feishu_app_enabled and not settings.feishu_webhook_enabled:
+        log.info('brief_send status=skipped reason=%s',
+                 'disabled' if settings.feishu_disabled else 'not_configured')
         return dict(status='skipped', message_id=None, error=None, attempts=0)
     error = None
     for attempt in range(1, 4):

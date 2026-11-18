@@ -2,10 +2,20 @@
 setlocal
 cd /d "%~dp0"
 if not exist ".venv\Scripts\python.exe" (
-    echo Missing .venv. Run: py -3.12 -m venv .venv
-    echo Then install requirements.txt with .venv\Scripts\python.exe -m pip install -r requirements.txt
+    echo Missing .venv. Run setup_windows.bat first.
     pause
     exit /b 1
+)
+if /i "%~1"=="safe" (
+    rem 显式开关；清空环境变量在 PowerShell 中等于删除变量，会被 .env 回填。
+    set "AGENT_FEISHU_DISABLED=1"
+    echo Safe mode: AGENT_FEISHU_DISABLED=1, real Feishu sends are disabled.
+)
+if not "%~1"=="" if /i not "%~1"=="safe" (
+    echo Unknown mode: %~1
+    echo Usage: run_agent.bat [safe]
+    pause
+    exit /b 2
 )
 set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8

@@ -4,7 +4,7 @@
 
 已完成 PPO 权威语料、16 题文档评测、命名检索、Unicode 数值处理、真实 healthz、引用 fail-closed 与语料预检。最终真实评测时间：2026-11-09T20:37:03+08:00。
 阶段施工书见 [`../../AI-Agent施工书-2026-11-07.md`](../../AI-Agent施工书-2026-11-07.md)。该施工书为本地文件，不纳入本次提交。
-Phase 3 简报审核推送的实现与验收见本文末尾；Phase 4 平台集成未开始。
+Phase 3 简报审核推送与 Phase 4 平台集成的实现和验收见本文末尾。
 
 ## 环境与配置
 
@@ -20,6 +20,26 @@ chmod 600 .env
 ```
 
 填写配置的模型服务密钥；不得提交 `.env`。真实模型运行会把问题及工具结果（包括检索片段）发送到配置的 DeepSeek 服务。本轮执行有用户明确授权。
+
+### Windows 安装与安全启动
+
+Windows 需要 Python 3.12 x64 和 `py` 启动器。在 `agent` 目录运行：
+
+```bat
+setup_windows.bat
+```
+
+脚本创建 `.venv`，安装 `requirements.txt`，并排除没有 Windows 轮子的 `uvloop`；uvicorn 自动使用 asyncio 事件循环。需要向量检索时再运行 `setup_windows.bat rag`，从 PyTorch CPU 索引安装 `requirements-rag.txt`（含 `torch==2.15.0+cpu`）。首次构建索引前需准备 `BAAI/bge-small-zh-v1.5` 模型缓存；离线构建设置 `HF_HUB_OFFLINE=1`，否则 `sentence-transformers` 会尝试联网。
+
+安全启动（推荐用于验收和演示）：
+
+```bat
+run_agent.bat safe
+```
+
+`safe` 设置 `AGENT_FEISHU_DISABLED=1`。该开关在配置层同时关闭应用机器人和 Webhook，审批结果为 `saved_only`，`publish.status=skipped`，不发起任何飞书网络请求；直接调用 CLI `--send` 也会被拒绝。不要用“清空 `FEISHU_*` 环境变量”的方式禁用：PowerShell 的 `$env:X=''` 会删除变量，`load_dotenv` 随后从 `.env` 回填凭证，可能导致真实发送。不加参数运行 `run_agent.bat` 为普通模式，仍受 `.env` 中的 `AGENT_FEISHU_DISABLED` 控制。
+
+报告文件统一写 UTF-8 + LF 字节，`/workflow/{thread_id}/report` 按字节返回同一文件，因此 HTTP 下载内容的 SHA256 等于落盘 `report_sha256`，在 Windows 与 Linux 一致。
 
 ## 接口与问答图
 
@@ -256,6 +276,8 @@ SQLite真实服务重启前后同一待审草稿一致；草稿GET、市场33.90
 
 Streamlit 平台通过独立 HTTP 客户端连接本 Agent，不导入 Agent 代码。完整架构、两进程启动命令、安全模式和 3 分钟演示脚本见 [平台 README 的 Phase 4 段](../README.md#phase-4agent-平台集成与本地部署2026-11-10)。
 
-Linux：在本目录运行 `.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8001 --workers 1`。Windows：先创建 `.venv` 并安装 `requirements.txt`，再运行 `run_agent.bat`。SQLite checkpoint 要求单 worker。平台端口 8501，`AGENT_BASE_URL` 默认 `http://127.0.0.1:8001`。
+Linux：在本目录运行 `.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8001 --workers 1`。Windows：先运行 `setup_windows.bat`，再用 `run_agent.bat safe` 安全启动。SQLite checkpoint 要求单 worker。平台端口 8501，`AGENT_BASE_URL` 默认 `http://127.0.0.1:8001`。
 
-页面支持工具/引用/校验展示、会话内问答历史、简报生成与人工审核、按需下载报告。聊天 thread_id 不是服务端历史记忆。无飞书配置时审核仅保存报告；本轮真实飞书推送未验证（待授权）。[Phase 4 证据](eval/phase4_evidence.md)与 [quiz](eval/phase4_quiz.md)记录本轮验收。
+页面支持工具/引用/校验展示、会话内问答历史、简报生成与人工审核、按需下载报告。聊天 thread_id 不是服务端历史记忆。安全模式下审核仅保存报告；2026-11-10 经用户授权已完成一次真实飞书单卡验收（线程 `d74b1d9a876a4de0969c22ea801b6d8c`，message_id `om_x100b601830f150a8b4f860c0b35e038`）。[Phase 4 证据](eval/phase4_evidence.md)记录本轮验收。
+
+*文档最后更新: 2026-11-18（Phase 4.1：Windows 安全开关、报告字节一致性与安装脚本）*

@@ -141,6 +141,35 @@ def test_no_feishu_saved_only_and_duplicate(setup, monkeypatch):
     send.assert_not_called()
 
 
+def test_feishu_disable_switch_overrides_configured_credentials(setup, monkeypatch):
+    service, send, config = setup
+    assert feishu.settings.feishu_app_id and feishu.settings.feishu_app_secret
+    monkeypatch.setattr(feishu, 'settings', dataclasses.replace(feishu.settings, feishu_disabled=True))
+    state = service.review(service.run()['thread_id'], request())
+    assert state['status'] == 'saved_only' and state['publish_status'] == 'skipped'
+    assert state['message_id'] is None and state['publish_attempts'] == 0
+    assert (config.agent_dir/state['report_path']).exists()
+    send.assert_not_called()
+
+
+def test_notify_refuses_direct_send_when_disabled(monkeypatch):
+    monkeypatch.setattr(feishu, 'settings', dataclasses.replace(settings,
+        feishu_app_id='id', feishu_app_secret='secret', feishu_chat_id='chat', feishu_disabled=True))
+    with pytest.raises(feishu.FeishuError):
+        feishu.notify({})
+
+
+def test_settings_disable_flag_overrides_credentials(monkeypatch):
+    from app.config import Settings
+    monkeypatch.setenv('FEISHU_APP_ID', 'id')
+    monkeypatch.setenv('FEISHU_APP_SECRET', 'secret')
+    monkeypatch.setenv('FEISHU_WEBHOOK_URL', 'https://example.invalid/hook')
+    monkeypatch.setenv('AGENT_FEISHU_DISABLED', '1')
+    fresh = Settings()
+    assert fresh.feishu_disabled
+    assert not fresh.feishu_app_enabled and not fresh.feishu_webhook_enabled
+
+
 @pytest.mark.parametrize('tool', ['get_market_score', 'get_data_caveats', 'get_strategy_metrics', 'get_drawdown_recovery', 'get_risk_tier'])
 def test_required_tool_failure_never_sends(setup, monkeypatch, tool):
     service, send, config = setup
@@ -222,7 +251,12 @@ def test_api_run_get_report_and_duplicate_approval(client, setup):
     assert duplicate['duplicate'] is True and setup[1].call_count == 1
     assert client.post(f'/workflow/{tid}/approve', json={'action':'edit','reviewer':'x','edited_markdown':'x'}).status_code == 409
     assert client.post(f'/workflow/{tid}/approve', json={'action':'reject','reviewer':'x','comment':'x'}).status_code == 409
-    assert client.get(f'/workflow/{tid}/report').text == (setup[2].agent_dir/final.json()['report_path']).read_text()
+    saved_path = setup[2].agent_dir/final.json()['report_path']
+    saved = saved_path.read_bytes()
+    served = client.get(f'/workflow/{tid}/report')
+    assert served.content == saved
+    assert final.json()['report_sha256'] == hashlib.sha256(saved).hexdigest()
+    assert b'\r\n' not in saved
 
 
 @pytest.mark.parametrize('payload', [

@@ -295,7 +295,7 @@ cd /home/lx/农行杯/fund-platform
 AGENT_BASE_URL=http://127.0.0.1:8001 /home/lx/miniconda3/bin/python -m streamlit run platform/app.py --server.address 127.0.0.1 --server.port 8501
 ```
 
-访问 `http://127.0.0.1:8501`，进入「AI 助手」。Windows 在 Agent 目录运行 `run_agent.bat`；首次先用 Python 3.12 创建 `.venv` 并安装 `requirements.txt`。脚本前台运行 uvicorn，端口 8001，单 worker，失败时保留错误供查看。Linux 环境只能静态检查此脚本。
+访问 `http://127.0.0.1:8501`，进入「AI 助手」。Windows 首次在 Agent 目录运行 `setup_windows.bat` 创建 `.venv` 并安装依赖（自动排除无 Windows 轮子的 `uvloop`）；之后用 `run_agent.bat safe` 安全启动。脚本前台运行 uvicorn，端口 8001，单 worker，失败时保留错误供查看。安全启动也可在 Linux 使用：`AGENT_FEISHU_DISABLED=1 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8001 --workers 1`。
 
 页面默认「🎯 预制场景」。Agent 不可达时，实时问答明确提示连接失败；仍可以切回预制场景。健康检查超时 3 秒，缓存 5 秒；「检查 Agent 服务」只刷新健康检查，不清空 PPO 推理缓存。
 
@@ -305,16 +305,16 @@ AGENT_BASE_URL=http://127.0.0.1:8001 /home/lx/miniconda3/bin/python -m streamlit
 
 页面不收集模型密钥。密钥只放 `agent/.env`，Linux 权限 `600`，由 gitignore 排除。不得提交凭证、索引、checkpoint、生成报告与模型缓存。审核 API 无认证，仅供受信本机使用；SQLite checkpoint 必须单进程运行。公网部署、鉴权、Docker、定时任务与飞书回调不在本阶段范围。
 
-安全演示时，在启动 Agent 的终端显式清空五个飞书配置：
+安全演示使用显式开关，不要清空飞书凭证：
 
 ```bash
 cd /home/lx/农行杯/fund-platform/agent
-FEISHU_APP_ID= FEISHU_APP_SECRET= FEISHU_CHAT_ID= \
-FEISHU_WEBHOOK_URL= FEISHU_WEBHOOK_SECRET= \
-.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8001 --workers 1
+AGENT_FEISHU_DISABLED=1 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8001 --workers 1
 ```
 
-此模式审批后为 `saved_only`，表示报告保存，未发送飞书。本轮默认使用此模式。Phase 3 的单卡授权不适用于本轮；只有再次取得明确授权，才可以用真实配置向指定测试群发送最多一条卡片。
+Windows 等价命令为 `run_agent.bat safe`。开关在配置层同时关闭应用机器人和 Webhook，审批结果为 `saved_only`（`publish.status=skipped`），不发起飞书网络请求，CLI `--send` 也会被拒绝。不得用 `$env:FEISHU_APP_ID=''` 禁用：PowerShell 会删除变量，`.env` 随后被回填，可能真实发送。默认演示使用安全模式；只有再次取得明确授权，才可以用真实配置向指定测试群发送最多一条卡片。
+
+报告按 UTF-8 + LF 字节落盘，`/workflow/{thread_id}/report` 按字节返回同一文件；Windows 下载报告的 SHA256 与 `report_sha256` 一致。
 
 2026-11-10 经用户再次授权，向唯一测试群「小波❤小蛙」真实发送 1 条卡片。线程 `d74b1d9a876a4de0969c22ea801b6d8c`，状态 `published`，message_id `om_x100b601830f150a8b4f860c0b35e038`，发送尝试 1 次。重复 approve 返回 `duplicate=true`，message_id 不变，未重发。
 
@@ -331,4 +331,4 @@ FEISHU_WEBHOOK_URL= FEISHU_WEBHOOK_SECRET= \
 
 验收记录见 [Phase 4 证据](agent/eval/phase4_evidence.md)，最终问答评测见 [25 题报告](agent/eval/report_agent.md)。
 
-*文档最后更新: 2026-11-10（Phase 4：平台 Agent 集成、本地验收与真实飞书单卡验收）*
+*文档最后更新: 2026-11-18（Phase 4.1：Windows 安全开关、报告字节一致性与安装脚本）*

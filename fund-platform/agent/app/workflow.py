@@ -206,7 +206,9 @@ def atomic_save(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_name(path.name + '.' + uuid4().hex + '.tmp')
     try:
-        temp.write_text(text, encoding='utf-8')
+        # write_text 在 Windows 会把 \n 转成 \r\n，导致落盘 hash 与 HTTP
+        # 下载内容（按字节）不一致；报告统一写 LF 字节。
+        temp.write_bytes(text.encode('utf-8'))
         temp.replace(path)
     finally:
         temp.unlink(missing_ok=True)  # Only this invocation's temporary file.

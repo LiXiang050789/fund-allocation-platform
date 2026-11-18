@@ -39,6 +39,9 @@ class Settings:
     # 开关
     enable_vector_rag: bool = field(default_factory=lambda: _flag("ENABLE_VECTOR_RAG", "1"))
     enable_llm_verifier: bool = field(default_factory=lambda: _flag("ENABLE_LLM_VERIFIER", "1"))
+    # 安全模式：无论凭证是否齐全，都强制跳过真实发送。空环境变量在
+    # PowerShell 中等于删除变量，load_dotenv 会回填 .env 凭证，不能用于禁用。
+    feishu_disabled: bool = field(default_factory=lambda: _flag("AGENT_FEISHU_DISABLED", "0"))
     log_level: str = field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO"))
 
     # 路径
@@ -52,11 +55,11 @@ class Settings:
 
     @property
     def feishu_app_enabled(self) -> bool:
-        return bool(self.feishu_app_id and self.feishu_app_secret)
+        return not self.feishu_disabled and bool(self.feishu_app_id and self.feishu_app_secret)
 
     @property
     def feishu_webhook_enabled(self) -> bool:
-        return bool(self.feishu_webhook_url)
+        return not self.feishu_disabled and bool(self.feishu_webhook_url)
 
 
 settings = Settings()

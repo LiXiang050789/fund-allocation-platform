@@ -135,7 +135,9 @@ def workflow_report(thread_id: str):
     text = state['draft']
     if state.get('report_path'):
         try:
-            text = (get_workflow().config.agent_dir/state['report_path']).read_text(encoding='utf-8')
+            # 按字节返回落盘文件，避免 text 模式的换行归一化改变 SHA256。
+            return Response(content=(get_workflow().config.agent_dir/state['report_path']).read_bytes(),
+                            media_type='text/markdown')
         except OSError:
             raise HTTPException(status_code=409, detail='报告文件不可用') from None
     return Response(content=text, media_type='text/markdown')
