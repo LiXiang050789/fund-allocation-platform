@@ -18,7 +18,7 @@ import streamlit as st
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agent_client import (AgentError, AgentHTTPError, AgentUnavailable, get_base_url,
-                          health, chat, start_workflow, get_workflow, review_workflow,
+                          health, chat, stream_chat, chat_history, clear_chat, start_workflow, get_workflow, review_workflow,
                           safe_detail)
 
 st.set_page_config(page_title="指数基金智能配置平台", layout="wide", page_icon="📊")
@@ -943,7 +943,7 @@ with tab3:
 
 
 with tab4:
-    st.header("AI 投顾助手")
+    st.header("AI 投研助手")
     st.session_state.setdefault("agent_thread_id", uuid4().hex)
     st.session_state.setdefault("agent_chat_history", [])
     st.session_state.setdefault("agent_health_nonce", 0)
@@ -976,7 +976,7 @@ with tab4:
         online = False
         show_agent_error(exc)
 
-    mode = st.radio("模式", ["🎯 预制场景", "🤖 Agent 实时问答"], horizontal=True)
+    mode = st.radio("模式", ["🎯 预制场景", "🤖 Agent 实时问答"], index=1, horizontal=True)
     if mode == "🎯 预制场景":
         ppo_info = _current_ppo_info(latest["date"])
         if ppo_info["ok"]:
@@ -1019,120 +1019,239 @@ with tab4:
             st.markdown(f"### {title}")
             st.info(content)
     else:
-        st.caption("页面历史仅保存在当前 Streamlit 会话；请求标识不代表服务端对话记忆。")
-        if agent_base and not online:
-            show_agent_error(AgentUnavailable())
-        for item in st.session_state["agent_chat_history"]:
-            st.markdown(f"**问题：** {item['question']}")
-            result = item["result"]
-            st.markdown(display_answer(result.get("answer", "")))
-            st.caption(f"耗时 {result.get('latency_ms', 0)/1000:.1f}s · 校验 {'通过' if result.get('verified') else '未通过'} · 会话 {result.get('thread_id', '')[:8]}")
-            if not result.get("verified"):
-                st.warning("回答未通过数字/引用校验，请核对来源。")
-            with st.expander("引用来源"):
-                if result.get("citations"):
-                    for citation in result["citations"]:
-                        st.write(citation)
-                else:
-                    st.write("无引用")
-            if result.get("tool_calls"):
-                with st.expander("工具调用"):
-                    st.table([{"工具": call.get("name", ""),
-                               "参数": json.dumps(call.get("args", {}), ensure_ascii=False),
-                               "状态": "成功" if call.get("ok") else "失败"}
-                              for call in result["tool_calls"]])
-        st.divider()
-        user_q = st.text_input("输入你的问题", key="agent_question")
-        if st.button("发送", key="agent_send", disabled=not agent_base):
-            if not user_q.strip():
-                st.info("请输入问题")
-            else:
-                with st.spinner("思考中..."):
-                    try:
-                        answer = chat(user_q.strip(), st.session_state["agent_thread_id"], base_url=agent_base)
-                        if answer.get("error") and answer.get("answer") == "服务暂时不可用":
-                            st.error("服务暂时不可用")
-                        else:
-                            st.session_state["agent_chat_history"].append({"question": user_q.strip(), "result": answer})
-                            st.rerun()
-                    except AgentError as exc:
-                        show_agent_error(exc)
+        welcome = "你好，我是平台内置投研 AI 助手。可以聊金融常识，也可以查询平台历史数据。请直接提问；简报工作流入口在下方。"
+        labels = {"chat": "通用回答", "research": "证据回答", "refusal": "合规拒答"}
+        conversations = st.session_state.setdefault("conversations", {})
 
-    st.divider()
-    st.subheader("投研简报工作流")
-    if st.button("生成简报", key="workflow_run", disabled=not agent_base):
-        try:
-            with st.spinner("生成简报中..."):
-                st.session_state["workflow_state"] = start_workflow(base_url=agent_base)
-                st.session_state["workflow_publish_confirm"] = False
-        except AgentError as exc:
-            show_agent_error(exc)
-    state = st.session_state.get("workflow_state", {})
-    if st.button("刷新状态", key="workflow_refresh", disabled=not (agent_base and state.get("thread_id"))):
-        try:
-            state = get_workflow(state["thread_id"], base_url=agent_base)
-            st.session_state["workflow_state"] = state
-        except AgentError as exc:
-            show_agent_error(exc)
-    if state:
-        labels = {"awaiting_review": "待审核", "published": "已发布", "saved_only": "已保存（未发送飞书）",
-                  "publish_failed": "发布失败（报告已保存）", "rejected": "已驳回终止", "failed": "生成失败"}
-        thread = state["thread_id"]
-        status = state["status"]
-        revision = state.get("revision", 0)
-        st.write(f"线程 {thread[:8]} · 报告日期 {state.get('report_date')} · 状态 {labels.get(status, status)} · 修订号 {revision}")
-        st.caption(f"thread_id：{thread} · 更新时间：{state.get('updated_at', '')}")
-        notice = st.session_state.pop("workflow_notice", None)
-        if notice:
-            st.success(notice)
-        publish = state.get("publish", {})
-        if status == "failed":
-            st.error(safe_detail(state.get("error")))
-        if status == "saved_only":
-            st.success("报告已保存，飞书未发送")
-        elif status == "published":
-            st.success("已发布")
-        elif status == "publish_failed":
-            st.error("报告已保存，飞书发送失败，可重试")
-            st.error(safe_detail(publish.get("error")))
-        if status in {"published", "saved_only"}:
-            message_id = publish.get("message_id")
-            if message_id:
-                st.caption(f"message_id：{message_id}")
-            if state.get("duplicate"):
-                st.info("duplicate=true · 已发布，未重复发送" if status == "published"
-                        else "duplicate=true · 已保存，未重复处理")
-        draft = ""
-        if state.get("draft"):
-            draft = st.text_area("简报草稿", value=state["draft"], height=420,
-                                 key=f"workflow_draft_{thread}_{revision}_{status}", disabled=status != "awaiting_review")
-        if status in {"awaiting_review", "publish_failed"}:
-            reviewer = st.text_input("审核人", key="workflow_reviewer")
-            if status == "awaiting_review":
-                if st.button("保存修改并继续审核", disabled=not (reviewer.strip() and draft.strip())):
-                    review_comment_dialog("edit", thread, reviewer, draft, agent_base)
-                if st.button("驳回", disabled=not reviewer.strip()):
-                    review_comment_dialog("reject", thread, reviewer, draft, agent_base)
-            confirm = st.checkbox("我确认向已授权飞书群发送（如已配置）", key="workflow_publish_confirm")
-            if st.button("审核通过并发布", disabled=not (reviewer.strip() and confirm)):
+        def new_conversation(thread=None):
+            thread = thread or uuid4().hex
+            conversations[thread] = {"title": "新对话", "messages": [
+                {"role": "assistant", "content": welcome, "mode": "chat"}], "mode": "chat"}
+            st.session_state["current_conversation"] = thread
+            st.session_state["conversation_list"] = thread
+            st.query_params["conversation"] = thread
+            return thread
+
+        def restore_conversation(thread):
+            restored = chat_history(thread, base_url=agent_base)
+            conv = conversations.setdefault(thread, {"title": "恢复的对话", "mode": "chat"})
+            conv["messages"] = [{"role": row["role"], "content": row["content"],
+                                  "mode": row["mode"], "result": row.get("result", {})}
+                                 for row in restored.get("messages", [])]
+            if not conv["messages"]:
+                conv["messages"] = [{"role": "assistant", "content": welcome, "mode": "chat"}]
+            first = next((m['content'] for m in conv['messages'] if m['role'] == 'user'), '新对话')
+            conv['title'] = first[:18]
+            conv['mode'] = conv['messages'][-1].get('mode', 'chat')
+            return conv
+
+        requested = st.query_params.get("conversation")
+        if requested and requested not in conversations:
+            if re.fullmatch(r"[A-Za-z0-9_-]{1,80}", requested):
                 try:
-                    updated = review_workflow(thread, "approve", reviewer.strip(), "", "", base_url=agent_base)
-                    st.session_state["workflow_state"] = updated
+                    restore_conversation(requested)
+                    st.session_state["current_conversation"] = requested
+                except AgentError as exc:
+                    show_agent_error(exc)
+            else:
+                st.warning("会话链接格式不合法")
+        current = st.session_state.get("current_conversation")
+        if current not in conversations:
+            current = new_conversation()
+        conv = conversations[current]
+        # A stop/rerun interrupts the streaming block. No final means no completed assistant turn.
+        if conv.pop('generating', False):
+            conv['messages'].append({'role': 'assistant', 'content': '生成已停止，回答未完成。',
+                                     'mode': conv.get('mode', 'chat'), 'incomplete': True})
+        left, right = st.columns([1, 4])
+        with left:
+            if st.button("＋ 新对话", use_container_width=True):
+                new_conversation()
+                st.rerun()
+            selected = st.radio("对话列表", list(conversations), index=list(conversations).index(current),
+                                format_func=lambda tid: conversations[tid]['title'], key="conversation_list")
+            if selected != current:
+                st.session_state['current_conversation'] = selected
+                st.query_params['conversation'] = selected
+                st.rerun()
+            if st.button("清空当前对话", use_container_width=True):
+                try:
+                    clear_chat(current, base_url=agent_base)
+                    conversations[current] = {"title": "新对话", "messages": [
+                        {"role": "assistant", "content": welcome, "mode": "chat"}], "mode": "chat"}
                     st.rerun()
                 except AgentError as exc:
                     show_agent_error(exc)
-        st.markdown("**审核历史**")
-        history = state.get("review_history", [])
-        if history:
-            st.table([{"动作": h.get("action"), "审核人": h.get("reviewer"), "意见": h.get("comment"),
-                       "时间": h.get("at"), "修订号": h.get("revision")} for h in history])
-        else:
-            st.write("暂无")
-        if state.get("draft"):
-            st.download_button("下载当前报告/草稿", data=state["draft"].encode("utf-8"),
-                               file_name=f"brief_{state.get('report_date') or 'draft'}_{thread[:8]}.md",
-                               mime="text/markdown", on_click="ignore",
-                               key=f"workflow_download_{thread}_{revision}_{status}")
+        with right:
+            st.caption(f"{'在线' if online else '未连接'} · {labels.get(conv['mode'], '通用回答')} · 会话 {current[:8]}")
+            if not online:
+                st.info("Agent 未连接。可以切换到预制场景；在线后可继续当前对话。")
+            st.markdown("""<style>
+            .st-key-phase6_chat [data-testid="stChatMessage"] {border-radius:16px;margin:8px 0;}
+            .st-key-phase6_chat [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {flex-direction:row-reverse;}
+            </style>""", unsafe_allow_html=True)
+
+            def show_answer_metadata(message):
+                kind = message.get('mode', 'chat')
+                st.caption(labels.get(kind, '通用回答'))
+                if message.get('incomplete'):
+                    st.warning('未完成：可以重新生成。')
+                    return
+                if kind == 'research':
+                    result = message.get('result', {})
+                    st.caption(f"耗时 {result.get('latency_ms', 0)/1000:.1f}s · 数字与引用校验：{'通过' if result.get('verified') else '未通过'}")
+                    if not result.get('verified'):
+                        st.warning('证据不足或校验未通过，请补充问题或核对来源。')
+                    with st.expander('引用来源'):
+                        for citation in result.get('citations', []):
+                            st.write(citation)
+                        if not result.get('citations'):
+                            st.write('无引用')
+                    with st.expander('工具调用'):
+                        st.json(result.get('tool_calls', []))
+                elif kind == 'chat':
+                    st.caption('未使用平台数据')
+
+            messages_box = st.container(height=560, key='phase6_chat')
+            with messages_box:
+                for message in conv['messages']:
+                    with st.chat_message(message['role']):
+                        st.markdown(display_answer(message['content']))
+                        if message['role'] == 'assistant':
+                            show_answer_metadata(message)
+            examples = ('介绍一下你自己', '最新市场评分和状态', 'LGB 与动态评分对比', '什么是夏普比率')
+            question = None
+            for slot, example in zip(st.columns(4), examples):
+                if slot.button(example, use_container_width=True, key='example_'+example):
+                    question = example
+            typed = st.chat_input('直接提问…', key='phase6_input', max_chars=4000, submit_mode='stop')
+            if typed is not None:
+                if typed.strip():
+                    question = typed.strip()
+                else:
+                    st.info('请输入问题')
+            if conv['messages'][-1].get('incomplete'):
+                if st.button('重新生成'):
+                    conv['messages'].pop()
+                    conv['pending'] = next((m['content'] for m in reversed(conv['messages']) if m['role']=='user'), None)
+            if question:
+                conv['messages'].append({'role':'user','content':question,'mode':conv.get('mode','chat')})
+                if conv['title'] == '新对话':
+                    conv['title'] = question[:18]
+                conv['pending'] = question
+                st.rerun()
+            pending = conv.pop('pending', None)
+            if pending:
+                conv['generating'] = True
+                with messages_box, st.chat_message('assistant'):
+                    body = st.empty()
+                    progress = st.status('正在理解问题…', expanded=True)
+                    partial, result = '', None
+                    iterator = stream_chat(pending, current, base_url=agent_base)
+                    try:
+                        for event, payload in iterator:
+                            if event == 'meta':
+                                conv['mode'] = payload['mode']
+                            elif event == 'status':
+                                progress.write(payload['label'])
+                            elif event == 'token':
+                                partial += payload['text']
+                                body.markdown(display_answer(partial))
+                            elif event == 'final':
+                                result = payload
+                                body.markdown(display_answer(result['answer']))
+                        if result is None:
+                            raise AgentError('回答未完成')
+                        conv['messages'].append({'role':'assistant','content':result['answer'],
+                                                 'mode':result['mode'],'result':result})
+                        conv['mode'] = result['mode']
+                        progress.update(label='回答完成', state='complete', expanded=False)
+                    except AgentError as exc:
+                        conv['messages'].append({'role':'assistant','content':partial or '连接中断，回答未完成。',
+                                                 'mode':conv['mode'],'incomplete':True})
+                        progress.update(label='未完成', state='error')
+                        show_agent_error(exc)
+                    finally:
+                        iterator.close()
+                    conv['generating'] = False
+                    st.rerun()
+
+    with st.expander("投研简报工作流", expanded=False):
+        st.divider()
+        st.subheader("投研简报工作流")
+        if st.button("生成简报", key="workflow_run", disabled=not agent_base):
+            try:
+                with st.spinner("生成简报中..."):
+                    st.session_state["workflow_state"] = start_workflow(base_url=agent_base)
+                    st.session_state["workflow_publish_confirm"] = False
+            except AgentError as exc:
+                show_agent_error(exc)
+        state = st.session_state.get("workflow_state", {})
+        if st.button("刷新状态", key="workflow_refresh", disabled=not (agent_base and state.get("thread_id"))):
+            try:
+                state = get_workflow(state["thread_id"], base_url=agent_base)
+                st.session_state["workflow_state"] = state
+            except AgentError as exc:
+                show_agent_error(exc)
+        if state:
+            labels = {"awaiting_review": "待审核", "published": "已发布", "saved_only": "已保存（未发送飞书）",
+                      "publish_failed": "发布失败（报告已保存）", "rejected": "已驳回终止", "failed": "生成失败"}
+            thread = state["thread_id"]
+            status = state["status"]
+            revision = state.get("revision", 0)
+            st.write(f"线程 {thread[:8]} · 报告日期 {state.get('report_date')} · 状态 {labels.get(status, status)} · 修订号 {revision}")
+            st.caption(f"thread_id：{thread} · 更新时间：{state.get('updated_at', '')}")
+            notice = st.session_state.pop("workflow_notice", None)
+            if notice:
+                st.success(notice)
+            publish = state.get("publish", {})
+            if status == "failed":
+                st.error(safe_detail(state.get("error")))
+            if status == "saved_only":
+                st.success("报告已保存，飞书未发送")
+            elif status == "published":
+                st.success("已发布")
+            elif status == "publish_failed":
+                st.error("报告已保存，飞书发送失败，可重试")
+                st.error(safe_detail(publish.get("error")))
+            if status in {"published", "saved_only"}:
+                message_id = publish.get("message_id")
+                if message_id:
+                    st.caption(f"message_id：{message_id}")
+                if state.get("duplicate"):
+                    st.info("duplicate=true · 已发布，未重复发送" if status == "published"
+                            else "duplicate=true · 已保存，未重复处理")
+            draft = ""
+            if state.get("draft"):
+                draft = st.text_area("简报草稿", value=state["draft"], height=420,
+                                     key=f"workflow_draft_{thread}_{revision}_{status}", disabled=status != "awaiting_review")
+            if status in {"awaiting_review", "publish_failed"}:
+                reviewer = st.text_input("审核人", key="workflow_reviewer")
+                if status == "awaiting_review":
+                    if st.button("保存修改并继续审核", disabled=not (reviewer.strip() and draft.strip())):
+                        review_comment_dialog("edit", thread, reviewer, draft, agent_base)
+                    if st.button("驳回", disabled=not reviewer.strip()):
+                        review_comment_dialog("reject", thread, reviewer, draft, agent_base)
+                confirm = st.checkbox("我确认向已授权飞书群发送（如已配置）", key="workflow_publish_confirm")
+                if st.button("审核通过并发布", disabled=not (reviewer.strip() and confirm)):
+                    try:
+                        updated = review_workflow(thread, "approve", reviewer.strip(), "", "", base_url=agent_base)
+                        st.session_state["workflow_state"] = updated
+                        st.rerun()
+                    except AgentError as exc:
+                        show_agent_error(exc)
+            st.markdown("**审核历史**")
+            history = state.get("review_history", [])
+            if history:
+                st.table([{"动作": h.get("action"), "审核人": h.get("reviewer"), "意见": h.get("comment"),
+                           "时间": h.get("at"), "修订号": h.get("revision")} for h in history])
+            else:
+                st.write("暂无")
+            if state.get("draft"):
+                st.download_button("下载当前报告/草稿", data=state["draft"].encode("utf-8"),
+                                   file_name=f"brief_{state.get('report_date') or 'draft'}_{thread[:8]}.md",
+                                   mime="text/markdown", on_click="ignore",
+                                   key=f"workflow_download_{thread}_{revision}_{status}")
 
 
 with tab5:

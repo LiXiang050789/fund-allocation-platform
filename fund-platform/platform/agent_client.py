@@ -115,3 +115,57 @@ def review_workflow(thread_id: str, action: str, reviewer: str, comment: str = "
 
 def get_report(thread_id: str, base_url: str | None = None, timeout: float = 15.0) -> str:
     return _request("GET", _thread_path(thread_id) + "/report", base_url, timeout, text=True)
+
+
+# Phase 6: chat transport remains independent of all Agent imports and secrets.
+def chat_history(thread_id, base_url=None, timeout=15.0):
+    return _request("GET", "/chat/history/" + quote(str(thread_id), safe=""), base_url, timeout)
+
+
+def clear_chat(thread_id, base_url=None, timeout=15.0):
+    return _request("DELETE", "/chat/" + quote(str(thread_id), safe=""), base_url, timeout)
+
+
+def stream_chat(question, thread_id, base_url=None):
+    """Strict SSE reader. Closing the generator closes its response/socket."""
+    import json
+    base = get_base_url() if base_url is None else _base_url(base_url)
+    response = None
+    try:
+        response = requests.post(base + "/chat/stream", stream=True, timeout=(5, 120),
+                                 json={"question": question, "thread_id": thread_id})
+        if not 200 <= response.status_code < 300:
+            try:
+                detail = response.json().get('detail')
+            except (ValueError, AttributeError):
+                detail = None
+            raise AgentHTTPError(response.status_code, safe_detail(detail))
+        response.encoding = 'utf-8'
+        event, lines, finished = '', [], False
+        for line in response.iter_lines(decode_unicode=True, chunk_size=1):
+            if line == '':
+                if lines:
+                    try:
+                        data = json.loads("\n".join(lines))
+                    except ValueError:
+                        raise AgentError('SSE 数据无效，回答未完成') from None
+                    if event not in {'meta', 'status', 'token', 'final', 'error'} or not isinstance(data, dict):
+                        raise AgentError('SSE 事件无效，回答未完成')
+                    if event == 'error':
+                        raise AgentError(safe_detail(data.get('message')))
+                    yield event, data
+                    if event == 'final':
+                        finished = True
+                        break
+                event, lines = '', []
+            elif line.startswith('event:'):
+                event = line[6:].strip()
+            elif line.startswith('data:'):
+                lines.append(line[5:].lstrip())
+        if not finished:
+            raise AgentError('SSE 连接中断，回答未完成')
+    except requests.RequestException:
+        raise AgentUnavailable('Agent 连接中断或超时，回答未完成') from None
+    finally:
+        if response is not None:
+            response.close()
