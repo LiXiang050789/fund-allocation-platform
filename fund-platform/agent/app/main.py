@@ -6,10 +6,14 @@ from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import Response
-from pydantic import BaseModel, field_validator
+from fastapi.responses import Response, StreamingResponse
+from starlette.concurrency import iterate_in_threadpool
+from pydantic import BaseModel, Field, field_validator
 
 from app.config import settings
+from app.conversation import ConversationStore, validate_thread_id
+from app.orchestrator import Orchestrator
+import json
 from app.graph import graph
 from app.rag.index import validate, REBUILD
 from app.rag.retriever import CORPUS_PATH
@@ -21,6 +25,17 @@ from app.workflow import WorkflowService, WorkflowConflict, ReviewRequest, publi
 
 _workflow_service = None
 _workflow_lock = threading.RLock()
+_conversation_store = None
+_conversation_lock = threading.RLock()
+
+
+def get_conversations():
+    global _conversation_store
+    with _conversation_lock:
+        if _conversation_store is None:
+            _conversation_store = ConversationStore(settings.agent_dir / 'data/conversations.sqlite')
+        return _conversation_store
+
 
 
 def get_workflow():
@@ -33,7 +48,7 @@ def get_workflow():
 
 @asynccontextmanager
 async def lifespan(app):
-    global _workflow_service
+    global _workflow_service, _conversation_store
     try:
         yield
     finally:
@@ -41,13 +56,17 @@ async def lifespan(app):
             if _workflow_service is not None:
                 _workflow_service.close()
                 _workflow_service = None
+        with _conversation_lock:
+            if _conversation_store is not None:
+                _conversation_store.close()
+                _conversation_store = None
 
 
 app = FastAPI(title="投研 Agent", version="1.0", lifespan=lifespan)
 
 
 class ChatRequest(BaseModel):
-    question: str
+    question: str = Field(max_length=4000)
     thread_id: str | None = None
 
     @field_validator("question")
@@ -58,19 +77,45 @@ class ChatRequest(BaseModel):
         return value.strip()
 
 
+def checked_thread(thread_id):
+    try:
+        return validate_thread_id(thread_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="thread_id 格式不合法") from None
+
+
 @app.post("/chat")
 def chat(request: ChatRequest):
-    started = time.perf_counter()
-    thread_id = request.thread_id or str(uuid4())
-    try:
-        state = graph.invoke({"question": request.question, "thread_id": thread_id})
-        return dict(answer=state["answer"], tool_calls=state["tool_calls"], citations=state["citations"],
-                    verified=state["verified"], latency_ms=round((time.perf_counter()-started)*1000, 2), thread_id=thread_id)
-    except Exception as exc:
-        log.error("chat failed: %s", type(exc).__name__)
-        return dict(answer="服务暂时不可用", error=type(exc).__name__, verified=False,
-                    tool_calls=[], citations=[], thread_id=thread_id,
-                    latency_ms=round((time.perf_counter()-started)*1000, 2))
+    thread = checked_thread(request.thread_id if request.thread_id is not None else uuid4().hex)
+    return Orchestrator(get_conversations(), graph).run(request.question, thread)
+
+
+@app.post("/chat/stream")
+def chat_stream(request: ChatRequest):
+    thread = checked_thread(request.thread_id if request.thread_id is not None else uuid4().hex)
+    async def body():
+        events = Orchestrator(get_conversations(), graph).events(request.question, thread, streaming=True)
+        try:
+            async for event, data in iterate_in_threadpool(events):
+                yield f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+        finally:
+            events.close()
+    return StreamingResponse(body(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.get("/chat/history/{thread_id}")
+def chat_history(thread_id: str):
+    rows = get_conversations().history(checked_thread(thread_id))
+    return dict(thread_id=thread_id, messages=[
+        {key: value for key, value in row.items() if key != 'payload'} |
+        {'result': json.loads(row['payload'])} for row in rows])
+
+
+@app.delete("/chat/{thread_id}")
+def chat_clear(thread_id: str):
+    get_conversations().clear(checked_thread(thread_id))
+    return dict(thread_id=thread_id, cleared=True)
 
 
 @app.get("/healthz")

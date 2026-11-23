@@ -45,3 +45,6 @@ fund-platform/agent/data/index/
 fund-platform/agent/data/checkpoints.sqlite
 fund-platform/agent/reports/
 fund-platform/agent/.pytest_cache/
+
+# Phase 6 local conversation memory
+fund-platform/agent/data/conversations.sqlite*
