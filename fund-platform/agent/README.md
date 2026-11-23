@@ -51,7 +51,7 @@ curl -s -X POST localhost:8001/chat -H 'Content-Type: application/json' \
   -d '{"question":"最新市场评分和状态"}'
 ```
 
-`POST /chat` 返回 answer、tool_calls、citations、verified、latency_ms、thread_id。空白问题返回 HTTP 422。内部异常返回 HTTP 200 和 `verified=false`。thread_id 标识请求，不持久化对话记忆。
+`POST /chat` 返回 answer、tool_calls、citations、verified、latency_ms、thread_id。空白问题返回 HTTP 422。内部异常返回 HTTP 200 和 `verified=false`。Phase 6 起 thread_id 标识持久会话；最近 10 轮保存在独立 conversations.sqlite，详见文末。
 
 `intake → router → tools → compose → verify → finalize`。工具全部失败时最多再路由一轮。回答校验失败时最多再生成一次。模型异常时，从成功工具证据生成确定性摘要。
 
@@ -278,6 +278,62 @@ Streamlit 平台通过独立 HTTP 客户端连接本 Agent，不导入 Agent 代
 
 Linux：在本目录运行 `.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8001 --workers 1`。Windows：先运行 `setup_windows.bat`，再用 `run_agent.bat safe` 安全启动。SQLite checkpoint 要求单 worker。平台端口 8501，`AGENT_BASE_URL` 默认 `http://127.0.0.1:8001`。
 
-页面支持工具/引用/校验展示、会话内问答历史、简报生成与人工审核、按需下载报告。聊天 thread_id 不是服务端历史记忆。安全模式下审核仅保存报告；2026-11-10 经用户授权已完成一次真实飞书单卡验收（线程 `d74b1d9a876a4de0969c22ea801b6d8c`，message_id `om_x100b601830f150a8b4f860c0b35e038`）。[Phase 4 证据](eval/phase4_evidence.md)记录本轮验收。
+页面支持工具/引用/校验展示、会话内问答历史、简报生成与人工审核、按需下载报告。Phase 6 起聊天 thread_id 对应独立的服务端历史记忆。安全模式下审核仅保存报告；2026-11-10 经用户授权已完成一次真实飞书单卡验收（线程 `d74b1d9a876a4de0969c22ea801b6d8c`，message_id `om_x100b601830f150a8b4f860c0b35e038`）。[Phase 4 证据](eval/phase4_evidence.md)记录本轮验收。
 
 *文档最后更新: 2026-11-18（Phase 4.1：Windows 安全开关、报告字节一致性与安装脚本）*
+
+
+## Phase 6：通用对话与证据问答（2026-11-23）
+
+所有 HTTP 问答经 `app/orchestrator.py`。`app/graph.py` 六节点研究链路未修改。
+
+- `chat`：身份、寒暄、上海日期、通用知识与金融常识。身份和能力使用固定模板。`verified=null`，不带工具或引用。
+- `research`：平台数据、策略与文档。保留数字和引用校验。没有成功工具结果时返回澄清和 `verified=false`；校验未通过时不向 HTTP/SSE 客户端输出未经校验的数字草稿。
+- `refusal`：个性化买卖建议、推荐基金、预测涨跌、收益保证和全仓操作。复用 POLICY，`verified=null`。
+- 缺少策略和区间的回撤问题先澄清，公开 `mode=chat`。连续追问使用最近两轮补全策略和指标，用户原问指标优先于助手回答中的指标。
+
+### API 与流式契约
+
+| 方法 | 路径 | 返回 |
+| --- | --- | --- |
+| POST | `/chat` | 保留原字段，新增 `mode` |
+| POST | `/chat/stream` | SSE：meta、status、token、final、error |
+| GET | `/chat/history/{thread_id}` | 最近十轮，含模式及助手结果元数据 |
+| DELETE | `/chat/{thread_id}` | 清空指定会话 |
+
+问题必须非空且不超过 4000 字。thread_id 为 1–80 位 ASCII 字母、数字、下划线或连字符；省略时生成随机 ID，显式空值返回 422。
+SSE 首事件为 meta。chat 按完整句子缓冲，经过同一输出守卫后逐字发送 token；这会增加首 token 延迟，3 秒性能目标尚未做真实模型验证。
+research 仅输出“理解 → 选工具 → 查询/检索 → 生成 → 校验”状态，正文等 final 一次性返回。校验失败也只返回安全说明，不返回数字草稿。
+模型或连接失败发 error，无 final。客户端必须将其标为未完成，不作为完成回答使用。
+
+### 记忆、隐私与取消
+
+`agent/data/conversations.sqlite` 存储完整 user/assistant 对。参数化 SQL、线程锁、每会话最近 20 条消息。SQLite 与 sidecar 不入 Git。
+整个回答成功后原子写入一轮；取消发生在 final 前时不写半轮。清空与生成使用同一把 turn 锁，避免删完后旧生成又写回。
+当前实现单 worker 下串行处理完整对话轮次，不承诺多用户并发吞吐。服务关闭时关闭数据库。
+日志记录模式、路由、耗时、输出字符数和 verified；`token_count` 指输出字符数，不是模型计费 token 或 SSE 事件数。工具和检索日志隐藏完整参数/问题。
+仍仅供受信本机使用。会话 API 不提供用户鉴权或所有权隔离；不要直接公开到公网。
+
+### 前端
+
+AI 助手默认实时对话。左列新建/切换/清空，右列气泡、560px 消息区、模式标签及行内 chat_input。
+通过 query parameter `conversation` 恢复当前服务端会话；切换现有会话使用本地消息，不重新问模型。
+停止按钮使用 Streamlit 1.60 的 `submit_mode="stop"`。中断显示未完成，允许重新生成；客户端关闭 SSE 连接。
+预制场景仍可离线使用。原有简报生成、弹窗审核和下载保留在下方折叠区。
+
+### 验证与限制
+
+```bash
+# 默认 pytest，适用于未全局开启发送禁用开关的原测试配置
+.venv/bin/python -m pytest -q
+# 推荐的确定性检查：阻止全部外连，仅给旧的假发送器测试提供内存普通配置
+.venv/bin/python eval/run_offline_tests.py -q
+AGENT_FEISHU_DISABLED=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .venv/bin/python eval/run_chat_eval.py --offline
+.venv/bin/python -m app.rag.build_index --check-corpus
+.venv/bin/python -m app.rag.build_index --check-golden
+```
+
+真实模型评测必须另行授权数据外传，不能把 `--offline` 结果解释为模型质量验收。
+`run_chat_eval.py` 默认调用现有 DeepSeek，仅写 `report_chat.md`、`results_chat.json`、`answers_chat.md`。
+禁止在用户工作区运行 `eval/run_doc_eval.py`；三份 doc 结果保留开工时内容，由验收方隔离复跑。
+Phase 6 当前证据和未验证项见 [`eval/phase6_evidence.md`](eval/phase6_evidence.md)。
