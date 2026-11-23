@@ -1,6 +1,6 @@
 # Phase 6 实现与验收证据（2026-11-23）
 
-状态：部分完成。三个阶段的本地实现、离线测试、浏览器交互完成；真实模型评测因外传授权未确认而未执行。
+状态：已完成本轮约定范围。用户补充授权后，研究25题、通用12题与真实模型浏览器8场景通过。原文档16题按任务保留既有基线，由验收方隔离复跑。
 
 ## 基线与提交
 
@@ -13,19 +13,19 @@
 
 ## 验收表
 
-PASS 只表示表内注明的方法和范围。FAIL 表示验收条件尚未满足，不表示执行了一个失败的真实模型评测。
+PASS 只表示表内注明的方法和范围。文档16题为既有基线保留，不声称本轮重跑。
 
 | 项 | 结果 | 范围与证据 |
 | --- | --- | --- |
-| 原 25 题 | FAIL | 现有 results_agent.json 基线 25/25、工具0.96、引用1.0、verified1.0；本轮真实回归未执行 |
+| 原 25 题 | PASS | results_agent.json 为本轮 configured_llm：25/25、工具0.96、引用1.0、verified1.0、模型错误0 |
 | 文档 16 题 | PASS（基线） | 现有 results_doc.json 为16/16；本轮不运行 run_doc_eval.py；SHA256保持开工时内容；原文引用预检16/16 |
-| chat 12 题 | FAIL（真实未验证） | results_chat.json 为 offline_fake_llm、12/12；不能当作真实模型质量 |
+| chat 12 题 | PASS | results_chat.json 为本轮 configured_llm、12/12；逐条模式/关键词/契约检查通过 |
 | SSE 契约 | PASS | tests/test_stream.py：meta在先、chat有token、research无token、final字段、error无半轮记忆 |
-| 前端 golden path | PASS（假LLM） | tests/test_frontend.py AppTest；真实 Chromium 8场景，见 /tmp/fund-phase6-browser/results.json |
+| 前端 golden path | PASS | AppTest及假LLM原覆盖保留；真实模型+Chromium 8场景见 /tmp/fund-phase6-live-browser/results.json |
 | 多会话隔离 | PASS | test_conversation.py、test_stream.py；浏览器新建、切换、刷新、清空 |
-| 拒答与合规 | PASS（确定性范围） | test_intent.py、test_chat.py；拒答、句级守卫、提示注入固定安全答复；真实模型覆盖未验证 |
+| 拒答与合规 | PASS（确定性范围） | test_intent.py、test_chat.py；拒答、句级守卫、提示注入固定安全答复；真实12题及8场景通过，不代表穷尽合规验证 |
 | 无密钥/无越权 | PASS（检查范围） | 新暂存内容与本轮日志对实际配置密钥做精确匹配扫描；研究工具白名单未改；服务仅本机 |
-| 安全模式 | PASS | 本机验收 AGENT_FEISHU_DISABLED=1、假LLM、禁止Agent外连；未调用飞书 |
+| 安全模式 | PASS | 本机验收 AGENT_FEISHU_DISABLED=1；首轮禁止外连，补充授权后仅调用现有DeepSeek评测；未调用飞书 |
 | Git 状态 | PASS（纪律范围） | 两个实现提交及本文件提交均为本地；git diff --check、受保护哈希检查；无push |
 
 ## 测试命令与结果
@@ -41,7 +41,7 @@ PASS 只表示表内注明的方法和范围。FAIL 表示验收条件尚未满�
 最初隔离基线为135 passed, 1 warning in 15.44s。当前唯一 pytest warning 来自原有 LangGraph 默认值弃用提示。
 AppTest 单独结果：4 passed in 22.43s，原始输出 /tmp/fund-phase6-frontend-tests.log。
 
-## 浏览器与 HTTP
+## 首轮浏览器与 HTTP（假LLM）
 
 - 执行器：已安装的 Playwright + Chromium；无新增依赖。
 - 模型：假LLM；研究数据使用真实本地只读工具与确定性回退。
@@ -86,18 +86,42 @@ golden_quotes=16/16
 
 ## 未验证与限制
 
-- 自动审批拒绝真实DeepSeek评测：问题、工具证据和检索文档片段会发送到配置的外部服务，数据外传授权未确认。
-- 上述拒绝发生在命令执行前；本轮未因此调用真实模型，未覆盖原25题结果。
-- chat的3秒首token目标、真实模型p50/p95、完整真实模型端到端链路未验证。
+- 首轮自动审批因数据外传授权未确认而拒绝真实评测；用户随后明确授权现有DeepSeek评测，阻塞解除。
+- 首次拒绝时命令未执行；补充授权后正常执行研究与通用真实评测，更新非受保护的agent/chat评测产物。
+- 单次样本的首token和研究p50/p95见下文；并发、持续压力与其他网络环境未验证。
 - 句级守卫会等句子完成才发送字符，首token可能晚于原生模型流。离线报告耗时不代表真实模型性能。
 - SQLite目前串行化整个轮次；并发吞吐未验证。API仍无用户登录/所有权鉴权，只用于受信本机。
 - 原生停止后的本地未完成提示在下一次脚本重跑出现；服务端取消无半轮写入已有测试/浏览器证据。
 - 没有公网部署，没有开启飞书，没有push。
 
-## 后续授权与复验
+## 补充授权后的真实模型验收
 
-1. 推荐：明确授权固定评测问题及检索片段发送到现有配置的DeepSeek服务，再运行研究25题与chat12题真实评测。
-2. 或仅接受当前离线实现，保留真实质量/性能未验证标记，交由验收方运行。
-3. 文档16题仍由验收方在隔离目录复跑，不覆盖本工作区三个受保护文件。
+用户明确回复“授权现有 DeepSeek 评测”。只向现有配置服务发送固定评测问题和检索片段；密钥未输出。
 
-获得授权后使用安全模式和既有密钥配置；不打印.env。默认run_chat_eval.py为真实模型模式，--offline为明确的测试替身模式。
+```text
+AGENT_FEISHU_DISABLED=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .venv/bin/python eval/run_eval.py --mode agent
+准确率 25/25 = 100.0%
+工具选择准确率 0.96; 引用支持率 1.0
+verified_rate=1.0; llm_error_count=0
+latency_p50=3.69s; latency_p95=6.55s
+
+AGENT_FEISHU_DISABLED=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .venv/bin/python eval/run_chat_eval.py
+execution=configured_llm; total=12; passed=12
+```
+
+- 原始研究日志：/tmp/fund-phase6-research-live.log；报告：report_agent.md、results_agent.json、answers_agent.md。
+- 原始通用日志：/tmp/fund-phase6-chat-live.log；报告：report_chat.md、results_chat.json、answers_chat.md。
+- 三道实际调用通用模型的常识题C05/C06/C07首token为2.379/1.749/1.257秒；模板题不计作模型性能样本。
+- 12题全部通过，模式误判0。数据追问保留research；非研究verified=null、无工具/引用。
+- 原研究基线工具0.96、引用1.0、verified1.0保持不降；p95从旧基线20.13秒到本轮6.55秒，仅为各次样本统计。
+- 真实模型浏览器：/tmp/fund-phase6-live-browser/results.json，execution=real_browser_configured_llm，固定8场景全部通过。
+- 浏览器脚本：/tmp/fund_phase6_browser_live.py；日志：/tmp/fund-phase6-live-browser/walkthrough.log；截图：case-1.png至case-7.png，不入Git。
+- 真实服务使用/tmp/fund-phase6-live-browser/conversations.sqlite，与用户记忆隔离；飞书始终关闭。
+- 关闭前healthz：status=ok、rag_enabled=true、rag_backend=hybrid；原始JSON见/tmp/fund-phase6-live-browser/health-final.json。
+- 按记录的PID关闭真实验收Agent和平台，结束后8001/8501无监听；ports-after.txt为空。
+- 真实调用只属于评测，没有新增依赖、研究逻辑改动、公网部署或Git推送。
+
+## 下一步
+
+文档16题仍由验收方在隔离目录复跑，不覆盖本工作区三个受保护文件。
+继续保留单worker、本机访问和安全模式。并发吞吐、跨网络性能和公网鉴权不在本轮验收范围。

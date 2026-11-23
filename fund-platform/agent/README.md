@@ -302,7 +302,7 @@ Linux：在本目录运行 `.venv/bin/uvicorn app.main:app --host 127.0.0.1 --po
 | DELETE | `/chat/{thread_id}` | 清空指定会话 |
 
 问题必须非空且不超过 4000 字。thread_id 为 1–80 位 ASCII 字母、数字、下划线或连字符；省略时生成随机 ID，显式空值返回 422。
-SSE 首事件为 meta。chat 按完整句子缓冲，经过同一输出守卫后逐字发送 token；这会增加首 token 延迟，3 秒性能目标尚未做真实模型验证。
+SSE 首事件为 meta。chat 按完整句子缓冲，经过同一输出守卫后逐字发送 token；这会增加首 token 延迟；本轮三道实际调用通用模型的常识题首 token 为 1.257–2.379 秒，不代表并发性能承诺。
 research 仅输出“理解 → 选工具 → 查询/检索 → 生成 → 校验”状态，正文等 final 一次性返回。校验失败也只返回安全说明，不返回数字草稿。
 模型或连接失败发 error，无 final。客户端必须将其标为未完成，不作为完成回答使用。
 
@@ -333,7 +333,7 @@ AGENT_FEISHU_DISABLED=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .venv/bin/python
 .venv/bin/python -m app.rag.build_index --check-golden
 ```
 
-真实模型评测必须另行授权数据外传，不能把 `--offline` 结果解释为模型质量验收。
+真实模型评测涉及数据外传，必须取得授权。本轮用户授权后研究25/25、通用12/12通过；不能把 `--offline` 结果解释为模型质量验收。
 `run_chat_eval.py` 默认调用现有 DeepSeek，仅写 `report_chat.md`、`results_chat.json`、`answers_chat.md`。
 禁止在用户工作区运行 `eval/run_doc_eval.py`；三份 doc 结果保留开工时内容，由验收方隔离复跑。
 Phase 6 当前证据和未验证项见 [`eval/phase6_evidence.md`](eval/phase6_evidence.md)。

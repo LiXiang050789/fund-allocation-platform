@@ -1,9 +1,9 @@
 {
   "summary": {
-    "execution": "offline_fake_llm",
+    "execution": "configured_llm",
     "total": 12,
     "passed": 12,
-    "run_at": "2026-11-23T23:17:37.419691+08:00"
+    "run_at": "2026-11-23T23:37:37.929523+08:00"
   },
   "results": [
     {
@@ -16,12 +16,12 @@
         "verified": null,
         "citations": [],
         "tool_calls": [],
-        "latency_ms": 0.5
+        "latency_ms": 0.57
       },
       "passed": true,
       "failures": [],
       "latency_s": 0.009,
-      "first_token_s": 0.0
+      "first_token_s": 0.001
     },
     {
       "id": "C02",
@@ -33,11 +33,11 @@
         "verified": null,
         "citations": [],
         "tool_calls": [],
-        "latency_ms": 0.36
+        "latency_ms": 0.44
       },
       "passed": true,
       "failures": [],
-      "latency_s": 0.007,
+      "latency_s": 0.009,
       "first_token_s": 0.0
     },
     {
@@ -54,7 +54,7 @@
       },
       "passed": true,
       "failures": [],
-      "latency_s": 0.006,
+      "latency_s": 0.01,
       "first_token_s": 0.0
     },
     {
@@ -67,7 +67,7 @@
         "verified": null,
         "citations": [],
         "tool_calls": [],
-        "latency_ms": 1.06
+        "latency_ms": 1.03
       },
       "passed": true,
       "failures": [],
@@ -78,58 +78,58 @@
       "id": "C05",
       "question": "什么是夏普比率？",
       "result": {
-        "answer": "夏普比率衡量单位风险的超额收益。通胀是一般物价持续上涨。ETF 是交易所交易基金。不构成投资建议。",
+        "answer": "夏普比率衡量“每承担一单位波动风险，能获得多少超额收益”，常用于比较投资组合的风险调整后表现。\n\n公式：\n夏普比率 =（组合收益率 − 无风险利率）÷ 组合收益波动率\n\n含义：\n- 分子是超过无风险利率的“超额收益”；\n- 分母是收益的波动率，常以标准差表示；\n- 比率越高，说明单位风险对应的超额收益越多。\n\n通用例子：\n假设某组合年化收益 10%，无风险利率 2%，年化波动率 12%，则夏普比率 =（10%−2%）÷12% ≈ 0.67。若另一组合收益 8%、波动率 6%，夏普比率 =（8%−2%）÷6% = 1.0，后者风险调整后表现更好。\n\n注意：\n1. 它假设收益近似正态、波动率能代表风险，对极端风险和偏态分布不敏感；\n2. 不同频率数据、不同无风险利率和样本期会让结果不可直接比较；\n3. 高夏普不一定代表未来更好，也可能来自特定样本期或策略特征。不构成投资建议。",
         "mode": "chat",
         "thread_id": "chat-eval-C05",
         "verified": null,
         "citations": [],
         "tool_calls": [],
-        "latency_ms": 2.89
+        "latency_ms": 3636.35
       },
       "passed": true,
       "failures": [],
-      "latency_s": 0.011,
-      "first_token_s": 0.002
+      "latency_s": 3.647,
+      "first_token_s": 2.379
     },
     {
       "id": "C06",
       "question": "什么是通胀？",
       "result": {
-        "answer": "夏普比率衡量单位风险的超额收益。通胀是一般物价持续上涨。ETF 是交易所交易基金。不构成投资建议。",
+        "answer": "通胀是**物价总水平持续上涨、货币购买力下降**的现象。常用CPI衡量：\n\n**通胀率 ≈（本期CPI－基期CPI）÷ 基期CPI × 100%**\n\n例子：去年一篮子商品100元，今年103元，通胀率约3%。原来100元能买的东西，现在约需103元。\n\n注意：个别商品涨价不算通胀，通常要看整体物价的**持续**上涨。温和通胀常见，过高会削弱购买力；通缩则是物价总水平持续下降。不构成投资建议。",
         "mode": "chat",
         "thread_id": "chat-eval-C06",
         "verified": null,
         "citations": [],
         "tool_calls": [],
-        "latency_ms": 1.8
+        "latency_ms": 2281.03
       },
       "passed": true,
       "failures": [],
-      "latency_s": 0.009,
-      "first_token_s": 0.001
+      "latency_s": 2.293,
+      "first_token_s": 1.749
     },
     {
       "id": "C07",
       "question": "ETF 是什么？",
       "result": {
-        "answer": "夏普比率衡量单位风险的超额收益。通胀是一般物价持续上涨。ETF 是交易所交易基金。不构成投资建议。",
+        "answer": "ETF（交易型开放式指数基金）是一种在证券交易所上市交易的基金，通常跟踪某个指数、行业、商品或债券组合。\n\n要点：\n- **像股票一样买卖**：交易时间内可按市价买入卖出，需要证券账户。\n- **一篮子资产**：一只ETF通常持有几十到上千只成分证券，买一份相当于间接持有一篮子资产。\n- **被动为主**：多数ETF目标是复制指数表现，管理费和交易成本通常低于主动基金。\n- **有折溢价**：市价可能高于或低于基金净值，套利机制通常有助于缩小偏离。\n- **可能有分红**：部分ETF会将成分股分红分配给持有人。\n- **风险仍在**：分散不等于保本，市场下跌时净值同样会跌；杠杆、反向、跨境等ETF还有额外风险。\n\n常见例子：沪深300ETF跟踪沪深300指数，买它相当于按指数权重持有一篮子A股大盘股。\n\n选择时可关注跟踪指数、费率、规模与流动性、跟踪误差、折溢价等通用指标。不构成投资建议。",
         "mode": "chat",
         "thread_id": "chat-eval-C07",
         "verified": null,
         "citations": [],
         "tool_calls": [],
-        "latency_ms": 1.87
+        "latency_ms": 2613.32
       },
       "passed": true,
       "failures": [],
-      "latency_s": 0.01,
-      "first_token_s": 0.001
+      "latency_s": 2.621,
+      "first_token_s": 1.257
     },
     {
       "id": "C08",
       "question": "动态评分的夏普是多少？",
       "result": {
-        "answer": "LGB融合：夏普比率 0.6462。不构成投资建议。\n[source: results/backtest/all_strategy_metrics.csv]",
+        "answer": "LGB融合的夏普比率为0.6462。不构成投资建议。\n[source: results/backtest/all_strategy_metrics.csv]",
         "mode": "research",
         "thread_id": "chat-eval-C08",
         "verified": true,
@@ -145,11 +145,11 @@
             "ok": true
           }
         ],
-        "latency_ms": 21.16
+        "latency_ms": 2572.18
       },
       "passed": true,
       "failures": [],
-      "latency_s": 0.086,
+      "latency_s": 6.329,
       "first_token_s": null
     },
     {
@@ -162,11 +162,11 @@
         "verified": null,
         "citations": [],
         "tool_calls": [],
-        "latency_ms": 0.11
+        "latency_ms": 0.12
       },
       "passed": true,
       "failures": [],
-      "latency_s": 0.009,
+      "latency_s": 0.007,
       "first_token_s": null
     },
     {
@@ -179,7 +179,7 @@
         "verified": null,
         "citations": [],
         "tool_calls": [],
-        "latency_ms": 0.16
+        "latency_ms": 0.24
       },
       "passed": true,
       "failures": [],
@@ -196,11 +196,11 @@
         "verified": null,
         "citations": [],
         "tool_calls": [],
-        "latency_ms": 0.15
+        "latency_ms": 0.18
       },
       "passed": true,
       "failures": [],
-      "latency_s": 0.008,
+      "latency_s": 0.007,
       "first_token_s": 0.0
     },
     {
