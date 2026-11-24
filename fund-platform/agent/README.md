@@ -337,3 +337,23 @@ AGENT_FEISHU_DISABLED=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .venv/bin/python
 `run_chat_eval.py` 默认调用现有 DeepSeek，仅写 `report_chat.md`、`results_chat.json`、`answers_chat.md`。
 禁止在用户工作区运行 `eval/run_doc_eval.py`；三份 doc 结果保留开工时内容，由验收方隔离复跑。
 Phase 6 当前证据和未验证项见 [`eval/phase6_evidence.md`](eval/phase6_evidence.md)。
+
+
+## Phase 7 P0：策略对比与每日评分（2026-11-24）
+
+新增两个只读工具，`GET /tools` 现在列出 11 个完整工具名。原九个工具保持可用。
+
+- `compare_strategies(strategies)`：只读 `results/backtest/all_strategy_metrics.csv`，保留请求顺序并去重。LGB/SASF 展开为正式名称；裸 PPO 展开为 PPO月度与PPO原生日频。展开后限制 2–4 个策略；未知、缺行或数量越界明确失败。默认列年化收益、夏普比率、最大回撤、卡玛比率；点名指标时只列该指标。
+- `get_market_score_history(start,end)`：ISO 日期，精确筛选交易日，不前向填充。1–5 日返回总分、状态、四项分项；6–10 日返回总分和状态；超过 10 日返回首末、极值、均值、五态分布，提示缩小范围。起止倒置、无交易日和超出 2015-01-05 至 2026-07-10 明确失败。
+- 日期纯代码解析支持 ISO、斜线、中文年月日与省略年份的中文区间；无年份时采用数据最新年份 2026。分隔符支持到、至、~、—。不自动交换倒置日期。
+- 对比路由先于评分；日期区间先于单日评分。状态天数统计仍用原统计工具。裸日期区间也进入 research。新查询由结构化证据直接排版，保留全部请求行，含引用和免责声明不超过 300 字；未修改 verify 语义。
+- 日期校验失败时 HTTP/SSE 返回明确澄清，`verified=false`，不会把最新评分当作区间结果。意图分类与结果封装仅新增该日期行为。
+- 研究回答和通用回答共享句末标点函数。保留引用、免责声明次序及 300/400 字预算。Streamlit 1.60 的 24 处宽度参数迁移为 `width="stretch"`，控件布局不变。AI 助手预设改为“LGB融合与PPO对比”。
+
+示例：`LGB 与动态评分对比`；`LGB融合与PPO对比`；`查询2026年7月8日到7月10日，每天的市场评分`；`7月8日到7月10日`。
+三天总分为 32.63、39.43、33.9，状态均为下行。每日分项以 CSV 为准，分数不加百分号。
+
+离线回归：在 `agent/` 执行 `.venv/bin/python eval/run_offline_tests.py -q`。
+详细测试、样例与浏览器证据见 [Phase 7 P0 证据](eval/phase7_p0_evidence.md)。
+本轮不运行真实模型评测，不改既有 25/16/12 题评测产物。P1 净值、PPO 权重和流水线 IC 不在本轮范围。
+长区间仅汇总；服务仍为单 worker、无鉴权的受信本机演示。未 push。

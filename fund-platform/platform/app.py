@@ -1119,7 +1119,7 @@ with tab4:
                         st.markdown(display_answer(message['content']))
                         if message['role'] == 'assistant':
                             show_answer_metadata(message)
-            examples = ('介绍一下你自己', '最新市场评分和状态', 'LGB 与动态评分对比', '什么是夏普比率')
+            examples = ('介绍一下你自己', '最新市场评分和状态', 'LGB融合与PPO对比', '什么是夏普比率')
             question = None
             for slot, example in zip(st.columns(4), examples):
                 if slot.button(example, width="stretch", key='example_'+example):

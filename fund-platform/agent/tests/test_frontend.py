@@ -121,3 +121,13 @@ def test_all_tabs_and_width_migration(ui, caplog):
     for name in ('plotly_chart', 'dataframe', 'button', 'image'):
         assert 'width' in inspect.signature(getattr(st, name)).parameters
     assert 'use_container_width' not in caplog.text
+
+
+def test_p0_comparison_preset(ui):
+    button = by_label(ui.button, 'LGB融合与PPO对比')
+    button.click().run()
+    assert not ui.exception
+    thread = ui.session_state['current_conversation']
+    messages = ui.session_state['conversations'][thread]['messages']
+    assert messages[-2]['content'] == 'LGB融合与PPO对比'
+    assert messages[-1]['mode'] == 'research'
