@@ -63,7 +63,9 @@ def data_fallback_calls(question):
     weight = any(w in q for w in ('权重','调仓','仓位','配置')) and ('PPO' in q or any(w in q for w in ('最新','当前','今天')))
     rule = any(w in q for w in ('设计','规则','怎么算','为什么','文档','怎么计算'))
     current = any(w in q for w in ('最新','当前','今天'))
-    ppo_query = weight and '评分' not in q and (not rule or (current and 'PPO' in q))
+    # An explicit tier plus a static-config phrase wins over the PPO branch: "C3最新推荐配置"
+    # asks for cached tier configuration, not the PPO cache.
+    ppo_query = weight and not tier_detail and '评分' not in q and (not rule or (current and 'PPO' in q))
     if re.search(r'对比|比较|VS', q) and len(compared) >= 2 and not any(w in q for w in ('净值','权重','流水线','仓位','调仓','配置')):
         return [{'name':'compare_strategies','args':{'strategies':compared}}]
     date_tool = 'get_strategy_nav' if nav else 'get_ppo_cached_weights' if ppo_query else 'get_market_score_history'
@@ -90,7 +92,7 @@ def data_fallback_calls(question):
         return [{'name':'get_strategy_nav','args':args}]
     # The existing dimension questions already use get_data_caveats (coverage matrix §17.3 #8).
     dimensions = '建模表' in q and any(w in q for w in ('多少列','多少维','维度','特征数'))
-    if not dimensions and any(w in compact for w in ('流水线','文件就绪','语义校验','建模表','年度IC','IC','预测条数','预测数','滑点','双边成本','单资产上限','回测口径','主表形状')):
+    if not dimensions and any(w in compact for w in ('流水线','文件就绪','语义校验','建模表','年度IC','IC','预测条数','预测数','预测多少','有效预测','原始文件','清洗CSV','滑点','双边成本','单资产上限','回测口径','主表形状')):
         return [{'name':'get_pipeline_status','args':{}}]
     if tier_detail:
         args = {'level':tier}
@@ -235,6 +237,9 @@ def p1_answer(question, result):
             shapes=data['feature_shapes'] if any(word in q for word in ('建模表','特征')) else data['shapes']
             labels={'etf_price_clean':'ETF价格','train_total_feature':'总特征','market_score_daily':'市场评分','valuation_merged':'估值','tech_factor_clean':'技术因子','macro_merged':'宏观','train_feature_filtered':'LGB特征','train_feature_filtered_ppo':'PPO特征'}
             return '；'.join(labels[name]+' '+(item['shape']+' '+item['encoding'] if item else '不可读') for name,item in shapes.items())
+        # Only answer the requested count; generic pipeline questions still get the summary below.
+        if '预测' in q:
+            return f"LGB有效预测{data['lgb_pred_count']}条"
         if any(word in q for word in ('文件','就绪','语义','原始','清洗')):
             return f"文件 {data['files_ready']}/{data['files_total']}、就绪校验 {data['semantics_ready']}/{data['semantics_total']}、原始 {data['raw_files']}、清洗 {data['clean_csvs']}"
         top,weight=data['top_feature'],data['ppo_weight']
