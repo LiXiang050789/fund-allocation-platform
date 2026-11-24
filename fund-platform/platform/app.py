@@ -314,8 +314,8 @@ def _render_weight_bar(ppo_info, title="PPO 权重"):
         )
     )
     fig.update_layout(height=320, title=title, yaxis_title="权重(%)", margin=dict(t=45, b=20))
-    st.plotly_chart(fig, use_container_width=True)
-    st.dataframe(weight_df.style.format({"权重": "{:.2%}"}), use_container_width=True, hide_index=True)
+    st.plotly_chart(fig, width="stretch")
+    st.dataframe(weight_df.style.format({"权重": "{:.2%}"}), width="stretch", hide_index=True)
 
 
 def _infer_multi_strategy(strategy_name, as_of_date):
@@ -428,13 +428,13 @@ def _render_weight_bar_generic(weight_map, title):
     ))
     fig.update_layout(height=320, title=title, yaxis_title="权重(%)",
                       margin=dict(t=45, b=20))
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     st.dataframe(weight_df.style.format({"权重": "{:.2%}"}),
-                 use_container_width=True, hide_index=True)
+                 width="stretch", hide_index=True)
 
 
 def _render_live_button(button_label, as_of_date):
-    if st.button(button_label, use_container_width=True):
+    if st.button(button_label, width="stretch"):
         with st.spinner("正在执行 PPO 实时推理，最多等待 60 秒..."):
             info = infer_latest_ppo_weight(as_of_date)
             _store_live_ppo_if_valid(info)
@@ -506,7 +506,7 @@ with tab1:
             )
         )
         fig_radar.update_layout(height=350, margin=dict(t=20, b=20), polar=dict(radialaxis=dict(range=[0, 30])))
-        st.plotly_chart(fig_radar, use_container_width=True)
+        st.plotly_chart(fig_radar, width="stretch")
     with col_right:
         st.line_chart(score_df.set_index("date")[["total_score"]].tail(500), height=350)
 
@@ -713,19 +713,19 @@ with tab_pipeline:
 
     with st.expander("① 采集层：只读脚本与最近产物", expanded=False):
         b1, b2, b3 = st.columns(3)
-        if b1.button("查看采集脚本", use_container_width=True):
+        if b1.button("查看采集脚本", width="stretch"):
             for script in ["爬取数据.py", "补充数据挖取.py"]:
                 path = _pipeline_script_path(script)
                 st.code(_script_head(path, 100), language="python")
                 st.caption(f"完整脚本已入库：{path}")
-        if b2.button("查看最近采集产物", use_container_width=True):
+        if b2.button("查看最近采集产物", width="stretch"):
             latest_raw = _latest_raw_mtime()
             if latest_raw:
                 rel_path, ts = latest_raw
                 st.info(f"data/raw 文件数：{raw_files}；最近文件：{rel_path}；更新时间：{ts}")
             else:
                 st.warning("data/raw 暂无可扫描文件")
-        if b3.button("重新扫描本地产物", use_container_width=True):
+        if b3.button("重新扫描本地产物", width="stretch"):
             _scan_pipeline_assets.clear()
             _pipeline_counts.clear()
             st.rerun()
@@ -742,7 +742,7 @@ with tab_pipeline:
             ],
             columns=["表", "行列"],
         )
-        st.dataframe(clean_summary, use_container_width=True, hide_index=True)
+        st.dataframe(clean_summary, width="stretch", hide_index=True)
 
     with st.expander("③ 特征筛选：漏斗与重要性", expanded=True):
         st.caption(f"总特征 {train_total_shape}；LGB 特征 {lgb_shape}；PPO 特征 {ppo_shape}")
@@ -750,17 +750,17 @@ with tab_pipeline:
             top10 = fi_df.head(10).iloc[::-1]
             fig = go.Figure(go.Bar(x=top10["importance"], y=top10["feature"], orientation="h", marker_color="#E91E63"))
             fig.update_layout(height=360, margin=dict(t=20, b=20), xaxis_title="importance")
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         image_path = f"{BASE}/PPT素材/fig7_feature_importance.png"
         if os.path.exists(image_path):
-            st.image(image_path, use_container_width=True)
+            st.image(image_path, width="stretch")
 
     with st.expander("④ 建模：LGB 年度 IC 与 PPO 对拍", expanded=True):
         ic_map = _lgb_annual_ic()
         if ic_map:
             fig_ic = go.Figure(go.Bar(x=list(ic_map.keys()), y=[round(v, 4) for v in ic_map.values()], marker_color="#2196F3"))
             fig_ic.update_layout(height=300, margin=dict(t=20, b=20), yaxis_title="IC")
-            st.plotly_chart(fig_ic, use_container_width=True)
+            st.plotly_chart(fig_ic, width="stretch")
 
         ppo_python, python_label = resolve_ppo_python()
         st.caption(f"PPO 解释器探测：{python_label} · {ppo_python}")
@@ -794,14 +794,14 @@ with tab_pipeline:
         if unified.empty:
             st.warning("统一回测指标文件读取失败，当前跳过指标表展示。")
         else:
-            st.dataframe(unified.style.format(format_dict, na_rep="—"), use_container_width=True, hide_index=True)
+            st.dataframe(unified.style.format(format_dict, na_rep="—"), width="stretch", hide_index=True)
         nav_all, _ = _safe_read_csv(f"{BASE}/results/backtest/all_strategy_nav.csv", parse_dates=["date"])
         if nav_all is not None:
             fig_nav = go.Figure()
             for col in [c for c in nav_all.columns if c != "date"]:
                 fig_nav.add_trace(go.Scatter(x=nav_all["date"], y=nav_all[col], mode="lines", name=col, line=dict(color=COLORS.get(col))))
             fig_nav.update_layout(height=420, margin=dict(t=20, b=20), yaxis_title="净值")
-            st.plotly_chart(fig_nav, use_container_width=True)
+            st.plotly_chart(fig_nav, width="stretch")
         else:
             st.warning("统一回测净值文件读取失败，当前跳过净值图展示。")
         st.caption("统一回测框架口径（10 套策略；SASF 硬切换＝下行/极寒切规则，其余用 PPO）")
@@ -810,7 +810,7 @@ with tab_pipeline:
         m2.metric("双边成本", "0.1%")
         m3.metric("单资产上限", "0.30")
         st.markdown("**分段回测（6 阶段）**")
-        st.image(f"{BASE}/results/charts/fig2_segmented_backtest.png", use_container_width=True)
+        st.image(f"{BASE}/results/charts/fig2_segmented_backtest.png", width="stretch")
         st.caption("分段回测图为基线口径（与项目书/PPT 同图）；本区上方的指标表与净值图为统一回测引擎口径。")
 
     with st.expander("⑥ 调仓建议：PPO 权重与校验", expanded=False):
@@ -866,7 +866,7 @@ with tab3:
     fig_bar.add_trace(go.Bar(x=etf_names, y=[w * 100 for w in etf_weights], marker_color=colors_bar, text=[f"{w*100:.0f}%" for w in etf_weights], textposition="outside"))
     fig_bar.add_hline(y=equity_pct * 100, line_dash="dash", line_color="gray", annotation_text=f"权益中枢 {equity_pct*100:.0f}%")
     fig_bar.update_layout(height=350, margin=dict(t=20, b=20), yaxis_title="权重(%)", yaxis=dict(range=[0, max(etf_weights) * 100 + 10]))
-    st.plotly_chart(fig_bar, use_container_width=True)
+    st.plotly_chart(fig_bar, width="stretch")
     st.caption(captions.get(tier_name, ""))
 
     st.divider()
@@ -897,7 +897,7 @@ with tab3:
     }
     st.info(strategy_desc[strategy_choice])
 
-    if st.button(f"🚀 执行 {strategy_choice} 推理", use_container_width=True, type="primary"):
+    if st.button(f"🚀 执行 {strategy_choice} 推理", width="stretch", type="primary"):
         with st.spinner(f"正在执行 {strategy_choice} 推理，请稍候..."):
             result = _infer_multi_strategy(strategy_choice, user_choose_date)
             st.session_state["multi_strategy_result"] = result
@@ -1010,7 +1010,7 @@ with tab4:
         col_scene, col_chat = st.columns([1, 2])
         with col_scene:
             for label in scenarios:
-                if st.button(label, use_container_width=True):
+                if st.button(label, width="stretch"):
                     st.session_state["scene"] = label
         with col_chat:
             if "scene" not in st.session_state:
@@ -1065,7 +1065,7 @@ with tab4:
                                      'mode': conv.get('mode', 'chat'), 'incomplete': True})
         left, right = st.columns([1, 4])
         with left:
-            if st.button("＋ 新对话", use_container_width=True):
+            if st.button("＋ 新对话", width="stretch"):
                 new_conversation()
                 st.rerun()
             selected = st.radio("对话列表", list(conversations), index=list(conversations).index(current),
@@ -1074,7 +1074,7 @@ with tab4:
                 st.session_state['current_conversation'] = selected
                 st.query_params['conversation'] = selected
                 st.rerun()
-            if st.button("清空当前对话", use_container_width=True):
+            if st.button("清空当前对话", width="stretch"):
                 try:
                     clear_chat(current, base_url=agent_base)
                     conversations[current] = {"title": "新对话", "messages": [
@@ -1122,7 +1122,7 @@ with tab4:
             examples = ('介绍一下你自己', '最新市场评分和状态', 'LGB 与动态评分对比', '什么是夏普比率')
             question = None
             for slot, example in zip(st.columns(4), examples):
-                if slot.button(example, use_container_width=True, key='example_'+example):
+                if slot.button(example, width="stretch", key='example_'+example):
                     question = example
             typed = st.chat_input('直接提问…', key='phase6_input', max_chars=4000, submit_mode='stop')
             if typed is not None:
@@ -1268,7 +1268,7 @@ with tab5:
         ],
         columns=["等级", "名称", "可购买产品", "问卷得分", "回测覆盖"],
     )
-    st.dataframe(risk_table, use_container_width=True, hide_index=True)
+    st.dataframe(risk_table, width="stretch", hide_index=True)
 
     st.divider()
     st.subheader("问卷设计概要")
@@ -1285,5 +1285,5 @@ with tab5:
 
     st.divider()
     st.subheader("三档策略匹配")
-    st.dataframe(tiers_df.style.format({"年化收益": "{:.1%}", "最大回撤": "{:.1%}", "夏普比率": "{:.2f}"}), use_container_width=True, hide_index=True)
+    st.dataframe(tiers_df.style.format({"年化收益": "{:.1%}", "最大回撤": "{:.1%}", "夏普比率": "{:.2f}"}), width="stretch", hide_index=True)
     st.caption("C1/C5 超出回测覆盖范围，建议咨询客户经理后人工配置")

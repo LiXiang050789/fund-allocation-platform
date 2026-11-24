@@ -109,3 +109,15 @@ def test_sse_interruption_is_explicit(monkeypatch):
     monkeypatch.setattr(agent_client.requests,'post',lambda *a,**k:Response())
     with pytest.raises(agent_client.AgentError,match='未完成'):
         list(agent_client.stream_chat('你好','a'))
+
+
+def test_all_tabs_and_width_migration(ui, caplog):
+    import inspect
+    import streamlit as st
+    assert len(ui.tabs) == 5
+    assert not ui.exception
+    source = (PLATFORM/'app.py').read_text()
+    assert 'use_container_width' not in source
+    for name in ('plotly_chart', 'dataframe', 'button', 'image'):
+        assert 'width' in inspect.signature(getattr(st, name)).parameters
+    assert 'use_container_width' not in caplog.text
