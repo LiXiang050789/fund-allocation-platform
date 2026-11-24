@@ -5,11 +5,18 @@ from datetime import date
 LATEST_DATA_YEAR = 2026
 DATE_TOKEN = re.compile(r"(?<![\d/-])(?:\d{4}[-/]\d{1,2}[-/]\d{1,2}|(?:\d{4}年)?\d{1,2}月\d{1,2}日)(?!\d)")
 SEPARATOR = re.compile(r"^\s*(?:到|至|~|～|—)\s*$")
+# 截至/截止是“截止到某日”的单日语义，不是起止区间分隔符。
+CUTOFF = re.compile(r"截(?:止|至)(?:到|至)?")
+
+
+def _strip_cutoff(question: str) -> str:
+    return CUTOFF.sub("", question)
 
 
 def range_requested(question: str) -> bool:
-    return bool(re.search(r"到|至|~|～|—", question) and
-                (DATE_TOKEN.search(question) or re.search(r"\d+月|每天.*评分|评分.*每天", question)))
+    text = _strip_cutoff(question)
+    return bool(re.search(r"到|至|~|～|—", text) and
+                (DATE_TOKEN.search(text) or re.search(r"\d+月|每天.*评分|评分.*每天", text)))
 
 
 def _date(token: str, year: int) -> str:
@@ -25,13 +32,14 @@ def _year(question: str) -> int:
 
 
 def parse_date_range(question: str) -> tuple[str, str] | None:
-    tokens = list(DATE_TOKEN.finditer(question))
-    if not range_requested(question):
+    text = _strip_cutoff(question)
+    tokens = list(DATE_TOKEN.finditer(text))
+    if not range_requested(text):
         return None
-    if len(tokens) != 2 or not SEPARATOR.fullmatch(question[tokens[0].end():tokens[1].start()]):
+    if len(tokens) != 2 or not SEPARATOR.fullmatch(text[tokens[0].end():tokens[1].start()]):
         raise ValueError("无法解析日期区间，请使用完整起止日期")
     try:
-        start, end = (_date(token.group(), _year(question)) for token in tokens)
+        start, end = (_date(token.group(), _year(text)) for token in tokens)
     except ValueError as exc:
         raise ValueError("日期无效，请使用有效年月日") from exc
     if start > end:
@@ -40,13 +48,14 @@ def parse_date_range(question: str) -> tuple[str, str] | None:
 
 
 def parse_single_date(question: str) -> str | None:
-    if range_requested(question):
+    text = _strip_cutoff(question)
+    if range_requested(text):
         return None
-    tokens = list(DATE_TOKEN.finditer(question))
+    tokens = list(DATE_TOKEN.finditer(text))
     if len(tokens) != 1:
         return None
     try:
-        return _date(tokens[0].group(), _year(question))
+        return _date(tokens[0].group(), _year(text))
     except ValueError as exc:
         raise ValueError("日期无效，请使用有效年月日") from exc
 

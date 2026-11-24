@@ -35,6 +35,15 @@ def test_single_dates(text, expected):
 
 
 @pytest.mark.parametrize('text', [
+    '截至2026年7月10日', '截至2026-07-10',
+    '截止2026年7月10日', '截止到2026年7月10日', '截止到2026-07-10',
+])
+def test_cutoff_is_single_date(text):
+    assert parse_date_range(text) is None
+    assert parse_single_date(text) == '2026-07-10'
+
+
+@pytest.mark.parametrize('text', [
     '2026年7月8日到7月10日', '7月8日到7月10日',
     '2026-07-08至2026-07-10', '2026/7/8~2026/7/10',
     '2026年7月8日—2026年7月10日', '2026年7月8日～7月10日',
@@ -163,6 +172,9 @@ def test_compare_missing_row(monkeypatch):
     ('LGB 夏普多少','get_strategy_metrics',{'strategy':'LGB'}),
     ('全期状态分布','get_market_state_summary',{}),
     ('2026/7/8评分','get_market_score',{'date':'2026-07-08'}),
+    ('截至2026年7月10日的市场评分','get_market_score',{'date':'2026-07-10'}),
+    ('截至2026-07-10的评分','get_market_score',{'date':'2026-07-10'}),
+    ('截止到2026年7月10日的状态','get_market_score',{'date':'2026-07-10'}),
     ('2026年7月8日到7月10日状态天数统计','get_market_state_summary',{'start':'2026-07-08','end':'2026-07-10'}),
 ])
 def test_routes(question, name, args):
