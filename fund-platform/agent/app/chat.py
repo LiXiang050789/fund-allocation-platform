@@ -2,6 +2,7 @@
 import re
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from app.config import settings
+from app.text import sentence_end
 from app.graph import get_llm, POLICY
 
 SYSTEM_PROMPT = """你是普通中文助手，简洁回答，含结尾不超过400字。
@@ -29,7 +30,7 @@ def guard(text):
         return "当前不支持联网搜索、实时行情或文件上传。" + DISCLAIMER, "chat"
     text = re.sub(r"\[(?:来源|source)\s*:[^\]]*\]", "", text, flags=re.I).strip()
     text = text.replace(DISCLAIMER, "").strip()
-    return text[:400-len(DISCLAIMER)].rstrip() + DISCLAIMER, "chat"
+    return sentence_end(text[:400-len(DISCLAIMER)-1], "请补充问题") + DISCLAIMER, "chat"
 
 
 def messages(question, history):

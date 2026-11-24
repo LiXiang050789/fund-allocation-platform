@@ -12,6 +12,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 
 from app.config import settings
+from app.text import sentence_end
 from app.tools import registry
 from app.rag.citations import (DOC_REF, citation, citation_matches, document_text,
                                marked_numbers, retrieved_chunks)
@@ -287,7 +288,7 @@ def compose(state):
         suffix = "实际数据以数据工具为准。" + suffix
     body = body.replace("不构成投资建议。", "").replace("实际数据以数据工具为准。", "").strip()
     footer = "\n" + "\n".join(dict.fromkeys(references)) if references else ""
-    limit = 300 - len(footer) - len(suffix)
+    limit = 300 - len(footer) - len(suffix) - 1
     if len(body) > limit:
         kept = ""
         for clause in re.findall(r"[^。；\n]+[。；\n]?", body):
@@ -295,7 +296,7 @@ def compose(state):
                 break
             kept += clause
         body = kept or "当前数据无法回答：回答超出长度限制。"
-    answer = body.rstrip("。 ") + "。" + suffix + footer
+    answer = sentence_end(body) + suffix + footer
     return dict(answer=answer, citations=list(dict.fromkeys(sources+doc_references)), attempts=state["attempts"]+1, llm_events=events)
 
 
