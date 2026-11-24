@@ -216,7 +216,7 @@ def test_risk_single_rows(level,strategy,annual,sharpe,drawdown,nav):
 @pytest.mark.parametrize('args',[{'level':'C1'},{'level':'C22'},{'strategy':'SASF'},{'strategy':'未知'}])
 def test_risk_errors(args):
     r=t.get_risk_tier_detail(**args)
-    assert not r['ok'] and '可选值' in r['error'] or (not r['ok'] and '可用策略' in r['error'])
+    assert not r['ok'] and '可选值' in r['error']
     assert r['data']=={} and r['as_of'] is None
 
 
@@ -242,3 +242,199 @@ def test_state_percentages_and_ratio_extension():
         assert row==next(item for item in metrics if item['策略']==row['策略'])
         assert row['年化收益/最大回撤']==round(row['年化收益']/abs(row['最大回撤']),4)
     assert [row['年化收益/最大回撤'] for row in compared]==[.9201,.7983]
+
+
+class WrongLLM:
+    def bind_tools(self, schemas):return self
+    def invoke(self,messages):
+        if '只选择' in messages[0].content:
+            return SimpleNamespace(tool_calls=[dict(name='get_market_score',args={})])
+        return SimpleNamespace(content='编造净值9999999999，今日实时。')
+
+
+@pytest.fixture
+def fake_llm(monkeypatch):
+    from app import graph as g
+    monkeypatch.setattr(g,'get_llm',lambda:WrongLLM())
+    return monkeypatch
+
+
+@pytest.mark.parametrize('question,name,args',[
+    ('最新 PPO 权重','get_ppo_cached_weights',{}),
+    ('2026年7月10日 PPO 调仓权重','get_ppo_cached_weights',{'date':'2026-07-10'}),
+    ('LGB融合最新净值','get_strategy_nav',{'strategies':['LGB融合']}),
+    ('LGB融合与PPO从2026年7月8日到7月10日净值','get_strategy_nav',{'start':'2026-07-08','end':'2026-07-10','strategies':['LGB融合','PPO月度','PPO原生日频']}),
+    ('C2保守型最终净值','get_risk_tier_detail',{'level':'C2'}),
+    ('C3推荐配置每个ETF多少','get_risk_tier_detail',{'level':'C3'}),
+    ('流水线文件就绪几个','get_pipeline_status',{}),
+    ('LGB 2022–2026年度IC','get_pipeline_status',{}),
+    ('回测滑点/双边成本/单资产上限','get_pipeline_status',{}),
+    ('十套策略收益回撤比','get_strategy_metrics',{'strategy':None}),
+    ('全期各状态占比','get_market_state_summary',{}),
+    ('LGB 与 PPO 净值对比','get_strategy_nav',{'strategies':['LGB融合','PPO月度','PPO原生日频']}),
+])
+def test_p1_routes(question,name,args,fake_llm):
+    from app import graph as g
+    from app.intent import classify
+    assert classify(question)=='research'
+    assert g.data_fallback_calls(question)==[dict(name=name,args=args)]
+    if name in g.P1_TOOLS:
+        assert g.router(g.intake({'question':question}))['pending']==[dict(name=name,args=args)]
+
+
+def test_weight_docs_and_mixed_routes(fake_llm):
+    from app import graph as g
+    for q in ('PPO 权重怎么设计','评分权重规则','PPO权重怎么算'):
+        assert g.document_question(q)
+        assert [item['name'] for item in g.fallback_calls(q)]==['search_docs']
+    for q in ('最新 PPO 权重和规则','当前PPO权重设计文档'):
+        assert [item['name'] for item in g.fallback_calls(q)]==['search_docs','get_ppo_cached_weights']
+        calls=g.router(g.intake({'question':q}))['pending']
+        assert [call['name'] for call in calls]==['search_docs','get_ppo_cached_weights']
+
+
+@pytest.mark.parametrize('question',['C3推荐配置，推荐一个ETF','请买入C2推荐配置并保证收益','推荐一只ETF','全仓C2推荐配置'])
+def test_static_tier_never_bypasses_refusal(question):
+    from app.intent import classify
+    assert classify(question)=='refusal'
+
+
+@pytest.mark.parametrize('question,tool,args,tokens',[
+    ('LGB融合最新净值','get_strategy_nav',{'strategies':['LGB']},['3399752.14','3.3998','组合净值']),
+    ('2026年7月10日PPO权重','get_ppo_cached_weights',{'date':'2026-07-10'},['缓存权重','2026-07-09','2026-07-10','沪深300','十年国债']),
+    ('流水线文件就绪几个','get_pipeline_status',{},['12/12','3/3','69','20']),
+    ('LGB 2022–2026年度IC','get_pipeline_status',{},['0.2317','0.2707','0.0356','-0.3316','0.0162']),
+    ('C2保守型最终净值','get_risk_tier_detail',{'level':'C2'},['2.44','2.31','保守型C2']),
+    ('C3推荐配置每个ETF多少','get_risk_tier_detail',{'level':'C3'},['10%','25%','静态推荐配置']),
+    ('全期各状态占比','get_market_state_summary',{},['47.1%','27.0%','20.7%','3.8%','1.4%']),
+])
+def test_p1_evidence_compose(question,tool,args,tokens,fake_llm):
+    from app import graph as g
+    r=t.execute(tool,args)
+    assert r['ok'],r['error']
+    state=g.intake({'question':question})|{'tool_results':[r]}
+    text=g.evidence_answer(question,[r])
+    assert all(token in text for token in tokens)
+    # The state distribution still accepts model composition under the old tool semantics.
+    if tool=='get_market_state_summary':
+        class EvidenceLLM(WrongLLM):
+            def invoke(self,messages):return SimpleNamespace(content=text)
+        # This fixture's monkeypatch restores the function after the test.
+        fake_llm.setattr(g, 'get_llm', lambda: EvidenceLLM())
+    output=g.compose(state)
+    assert g.verify(state|output)['verified'],output
+    assert all(token in output['answer'] for token in tokens)
+    assert '[source:' in output['answer'] and len(output['answer'])<=300
+    assert not any(token in output['answer'] for token in ('9999999999','实时推理','今日实时','，。'))
+
+
+@pytest.mark.parametrize('count,names',[(1,['LGB']),(5,['LGB']),(6,['LGB']),(10,['LGB','PPO']), (10,['LGB','PPO','SASF']), (5,['LGB','PPO','SASF'])])
+def test_nav_evidence_length(count,names,fake_llm):
+    from app import graph as g
+    frame=t.table('results/backtest/all_strategy_nav.csv').tail(count)
+    r=t.get_strategy_nav(names,start=frame.date.iloc[0],end=frame.date.iloc[-1])
+    state=g.intake({'question':'策略净值区间'})|{'tool_results':[r]}
+    output=g.compose(state)
+    assert g.verify(state|output)['verified'], output
+    assert '组合净值' in output['answer'] and len(output['answer'])<=300
+    assert '当前数据无法回答' not in output['answer']
+    assert frame.date.iloc[0] in output['answer'] and frame.date.iloc[-1] in output['answer']
+    if count>5:assert '缩小范围' in output['answer']
+
+
+@pytest.mark.parametrize('question',['LGB融合最新净值','最新PPO权重','流水线文件就绪几个','LGB 2022–2026年度IC','C2保守型最终净值','C3推荐配置每个ETF多少','全期各状态占比'])
+def test_p1_http(question,fake_llm,monkeypatch,tmp_path):
+    from app import main,graph as g
+    from app.conversation import ConversationStore
+    from fastapi.testclient import TestClient
+    # Deliberately wrong route; accurate evidence response for existing state-summary composer.
+    class EvidenceLLM(WrongLLM):
+        def invoke(self,messages):
+            if '只选择' in messages[0].content:return super().invoke(messages)
+            import json
+            payload=json.loads(messages[-1].content)
+            return SimpleNamespace(content=g.evidence_answer(payload['question'],payload['tool_results']))
+    monkeypatch.setattr(g,'get_llm',lambda:EvidenceLLM())
+    store=ConversationStore(tmp_path/'p1.sqlite')
+    monkeypatch.setattr(main,'get_conversations',lambda:store)
+    try:
+        r=TestClient(main.app).post('/chat',json={'question':question}).json()
+        assert r['mode']=='research' and r['verified'] is True,r
+        assert '[source:' in r['answer'] and len(r['answer'])<=300
+        assert '当前数据无法回答' not in r['answer']
+        assert not any(word in r['answer'] for word in ('实时推理','今日实时','9999999999'))
+    finally:store.close()
+
+
+@pytest.mark.parametrize('question,error',[
+    ('2026年7月4日LGB净值','非交易日或日期越界'),
+    ('2026年2月30日LGB净值','日期无效'),
+    ('LGB净值7月10日到7月8日','起止日期倒置'),
+    ('2015年1月5日PPO权重','早于首个权重日期'),
+    ('C1最终净值','未知风险档'),
+    ('C22最终净值','未知风险档'),
+    ('C2 PPO最终净值','未知策略'),
+])
+def test_p1_http_errors(question,error,fake_llm,monkeypatch,tmp_path):
+    from app import main
+    from app.conversation import ConversationStore
+    from fastapi.testclient import TestClient
+    store=ConversationStore(tmp_path/'errors.sqlite')
+    monkeypatch.setattr(main,'get_conversations',lambda:store)
+    try:
+        r=TestClient(main.app).post('/chat',json={'question':question}).json()
+        assert r['verified'] is False and error in r['answer'],r
+        assert not any(word in r['answer'] for word in ('3399752','33.9','/home/','Traceback'))
+    finally:store.close()
+
+
+@pytest.mark.parametrize('tool,message',[
+    ('get_strategy_nav','未知策略；可选值：X'),('get_risk_tier_detail','未知风险档；可选值：C2'),
+    ('get_ppo_cached_weights','PPO 权重总和异常'),('get_pipeline_status','无法唯一解析回测成本常量')])
+def test_readonly_error_allowlist(tool,message):
+    from app.dates import readonly_error
+    r=dict(tool=tool,ok=False,error='ValueError: '+message)
+    assert readonly_error([r])
+    r['error']='OSError: /home/private secret'
+    assert readonly_error([r]) is None
+    r['error']='ValueError: arbitrary /home/private'
+    assert readonly_error([r]) is None
+    r['error']='ValueError: 未知策略；/home/private secret'
+    assert '/home/' not in readonly_error([r])
+
+
+def test_p1_identity_keywords():
+    from app.intent import IDENTITY
+    for word in ('净值','缓存权重','流水线','年度 IC','推荐配置','9 份文档','2026-07-10','不是实时行情','人工审核'):
+        assert word in IDENTITY
+
+
+def test_asset_labels_are_evidence_not_unsupported_numbers():
+    for result in (t.get_ppo_cached_weights(),t.get_risk_tier_detail('C3')):
+        assert result['data']['asset_names']==list(t.ETF_CN.values())
+
+
+@pytest.mark.parametrize('question',['流水线六主表形状','流水线特征表形状','回测滑点/双边成本/单资产上限','十套策略最新净值','十套策略收益回撤比'])
+def test_additional_evidence_budgets(question,fake_llm):
+    from app import graph as g
+    calls=g.data_fallback_calls(question)
+    results=[t.execute(call['name'],call['args']) for call in calls]
+    # Existing metrics use the existing model composer; simulate an accurate short response.
+    class EvidenceLLM(WrongLLM):
+        def invoke(self,messages):return SimpleNamespace(content=g.evidence_answer(question,results))
+    fake_llm.setattr(g,'get_llm',lambda:EvidenceLLM())
+    state=g.intake({'question':question})|{'tool_results':results}
+    output=g.compose(state)
+    assert g.verify(state|output)['verified'],output
+    assert len(output['answer'])<=300 and '当前数据无法回答' not in output['answer']
+
+
+def test_mixed_docs_and_cache_preserve_both_evidence_sources(fake_llm):
+    from app import graph as g
+    chunk=dict(source_name='权重手册.md',section='缓存规则',text='缓存权重来自历史产物。',authority='authoritative',chunk_id='test')
+    docs=dict(ok=True,tool='search_docs',data={'chunks':[chunk]},source='权重手册.md')
+    state=g.intake({'question':'最新PPO权重和规则'})|{'tool_results':[docs,t.get_ppo_cached_weights()]}
+    output=g.compose(state)
+    assert g.verify(state|output)['verified'],output
+    assert '缓存权重' in output['answer'] and '[来源: 权重手册.md §缓存规则]' in output['answer']
+    assert '[source: results/ppo_weight2.csv]' in output['answer']

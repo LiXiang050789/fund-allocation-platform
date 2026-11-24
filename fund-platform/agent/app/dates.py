@@ -78,3 +78,31 @@ def history_error(results: list[dict], question: str = "") -> str | None:
         if message.startswith(allowed):
             return "日期区间无法查询：" + message + "。请提供有效区间重试。"
     return None
+
+
+def readonly_error(results: list[dict], question: str = "") -> str | None:
+    message = history_error(results, question)
+    if message:
+        return message
+    tools = {'get_strategy_nav','get_ppo_cached_weights','get_pipeline_status','get_risk_tier_detail'}
+    # Fixed messages only: never append an exception's arbitrary suffix or absolute path.
+    allowed = ('日期必须为YYYY-MM-DD','日期无效','非交易日或日期越界','区间内无交易日','起止日期倒置',
+               '日期越界：早于首个权重日期','未知策略','未知风险档','一次最多查询四个策略',
+               'PPO 权重总和异常','无法唯一解析回测成本常量','参数冲突','start/end必须同时提供')
+    for result in results:
+        if result.get('ok') or result.get('tool') not in tools:
+            continue
+        error = result.get('error') or ''
+        if not error.startswith('ValueError: '):
+            continue
+        detail = error[len('ValueError: '):]
+        for item in allowed:
+            if detail == item or detail.startswith(item+'；') or detail.startswith(item+'：'):
+                if item == '日期必须为YYYY-MM-DD' and question:
+                    try:
+                        parse_date_range(question)
+                        parse_single_date(question)
+                    except ValueError as exc:
+                        item = str(exc)
+                return '只读查询无法完成：' + item + '。请补充有效参数或核对本地产物。'
+    return None

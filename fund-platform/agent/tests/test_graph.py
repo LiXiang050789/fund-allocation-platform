@@ -94,12 +94,13 @@ def test_api(monkeypatch, tmp_path):
     assert client.get('/healthz').json()['rag_enabled'] is True
     assert client.get('/healthz').json()['vector_rag_enabled'] == api.settings.enable_vector_rag
     tools = client.get('/tools').json()
-    assert len(tools) == 11
+    assert len(tools) == 15
     assert {item['name'] for item in tools} == {
         'get_market_score', 'get_market_state_summary', 'get_strategy_metrics',
         'get_segment_performance', 'get_drawdown_recovery', 'get_risk_tier',
         'get_feature_importance', 'get_data_caveats', 'search_docs',
         'compare_strategies', 'get_market_score_history',
+        'get_strategy_nav', 'get_ppo_cached_weights', 'get_pipeline_status', 'get_risk_tier_detail',
     }
     monkeypatch.setattr(registry, 'settings', dataclasses.replace(registry.settings, score_path=tmp_path/'missing.csv'))
     data = client.post('/chat', json={'question': '最新评分'}).json()

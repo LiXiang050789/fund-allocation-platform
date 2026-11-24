@@ -8,14 +8,14 @@ from app.dates import range_requested
 
 IDENTITY = (
     "我是平台内置投研 AI 助手。可以查询市场评分与状态、十策略指标、分段表现、风险档、"
-    "回撤修复、特征重要性和数据口径，也能回答 9 份文档问题。支持投研简报与人工审核。"
+    "净值、PPO 缓存权重、流水线就绪/年度 IC、风险档最终净值/推荐配置、回撤修复、特征重要性和数据口径，也能回答 9 份文档问题。支持投研简报与人工审核。"
     "历史数据截止 2026-07-10，不是实时行情。不预测涨跌、不推荐个股、不保证收益，"
     "不给个性化投资建议。请直接提问；简报工作流入口在页面下方。不构成投资建议。"
 )
 CLARIFY = "请补充策略名称和日期区间，再查询具体回撤。不构成投资建议。"
 NO_EVIDENCE = "该问题需要平台数据或文档依据，请补充具体日期、策略或文档名。当前数据无法回答。不构成投资建议。"
 STRATEGIES = ("动态评分", "LGB", "SASF", "PPO", "等权", "MVO", "风险平价", "动量", "沪深300")
-ENTITIES = STRATEGIES + ("平台", "评分", "回测", "权重", "文档", "手册", "问卷", "费率", "分段", "风险档", "修复", "特征", "北向", "数据口径", "得分", "分项", "满分", "建模表", "状态空间", "前视", "C2", "C3", "C4", ".MD", ".DOCX", ".CSV")
+ENTITIES = STRATEGIES + ("收益回撤比", "收益/回撤比", "净值", "流水线", "就绪", "年度IC", "年度 IC", "滑点", "双边成本", "单资产上限", "最终净值", "配置权重", "推荐配置", "状态占比", "语义校验", "预测条数", "平台", "评分", "回测", "权重", "文档", "手册", "问卷", "费率", "分段", "风险档", "修复", "特征", "北向", "数据口径", "得分", "分项", "满分", "建模表", "状态空间", "前视", "C2", "C3", "C4", ".MD", ".DOCX", ".CSV")
 REFUSAL = re.compile(r"推荐.{0,12}(?:基金|股票|个股|ETF)|明天[^。？！]{0,30}(?:涨|跌)|涨停|保证[^。？！]{0,30}(?:收益|回报)|全仓|(?:建议|帮我|我该|应该).{0,6}(?:买入|卖出|加仓|减仓)|保本保收益")
 FOLLOWUP = re.compile(r"^(?:那|它|这个|换成|再问|对比一下|继续|该策略)")
 
@@ -37,7 +37,11 @@ def special_answer(question):
 
 
 def classify(question, history=()):
-    if REFUSAL.search(question):
+    # A platform tier's static allocation is distinct from selecting a personalized ETF.
+    refusal_text = question
+    if any(tier in question for tier in ('C2','C3','C4','保守','平衡','进取')):
+        refusal_text = question.replace('推荐配置', '静态配置')
+    if REFUSAL.search(refusal_text):
         return "refusal"
     if special_answer(question) is not None:
         return "chat"

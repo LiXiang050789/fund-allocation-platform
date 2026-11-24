@@ -355,7 +355,9 @@ def get_strategy_nav(strategies: list[str] | None = None, date: str | None = Non
             data['summary'][name] = dict(start_nav=float(first[name]), end_nav=float(last[name]),
                 max=dict(date=chosen.loc[chosen[name].idxmax(), 'date'], nav=float(chosen[name].max())),
                 min=dict(date=chosen.loc[chosen[name].idxmin(), 'date'], nav=float(chosen[name].min())),
-                range_multiple=round(float(last[name] / first[name]), 4))
+                range_multiple=round(float(last[name] / first[name]), 4),
+                display_nav_10k={key: round(float(value)/10000, 2) for key,value in
+                    (('start',first[name]),('end',last[name]),('max',chosen[name].max()),('min',chosen[name].min()))})
     return data, last['date']
 
 
@@ -376,7 +378,7 @@ def get_ppo_cached_weights(date: str | None = None):
         raise ValueError('PPO 权重总和异常')
     return dict(date=row['date'], requested_date=requested,
                 exact=requested is None or row['date'] == requested,
-                weights=weights, weights_cn={ETF_CN[code]: value for code, value in weights.items()},
+                weights=weights, asset_names=list(ETF_CN.values()), weights_cn={ETF_CN[code]: value for code, value in weights.items()},
                 weight_sum=round(total, 6), min_weight=round(min(weights.values()), 6),
                 latest_available=latest), row['date']
 
@@ -503,7 +505,7 @@ def get_risk_tier_detail(level: str | None = None, strategy: str | None = None):
     data = dict(rows=records(df))
     if df['风险档'].nunique() == 1:
         equity = float(df['权益中枢%'].iloc[0]) / 100
-        data.update(equity_center=equity, recommended_weights={name: equity/5 if index < 5 else (1-equity)/2 for index,name in enumerate(ETF_CN.values())})
+        data.update(equity_center=equity, asset_names=list(ETF_CN.values()), recommended_weights={name: equity/5 if index < 5 else (1-equity)/2 for index,name in enumerate(ETF_CN.values())})
     return data, scores().date.iloc[-1]
 
 
