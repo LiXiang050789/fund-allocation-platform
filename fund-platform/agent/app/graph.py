@@ -13,6 +13,7 @@ from langgraph.graph import END, START, StateGraph
 
 from app.config import settings
 from app.text import sentence_end
+from app.dates import parse_date_range, parse_single_date, range_requested, history_error
 from app.tools import registry
 from app.rag.citations import (DOC_REF, citation, citation_matches, document_text,
                                marked_numbers, retrieved_chunks)
@@ -53,7 +54,24 @@ def refusal(question):
 
 def data_fallback_calls(question):
     q = question.upper()
-    dates = re.findall(r"\d{4}-\d{2}-\d{2}", q)
+    compared = registry.strategies_in_question(question)
+    if re.search(r"对比|比较|VS", q) and len(compared) >= 2:
+        return [{"name": "compare_strategies", "args": {"strategies": compared}}]
+    try:
+        interval = parse_date_range(question)
+        single = parse_single_date(question)
+    except ValueError:
+        # Invalid range stays on the date tool's explicit error path, never latest score.
+        return [{"name": "get_market_score_history", "args": {"start": "", "end": ""}}]
+    if interval:
+        counts = "状态" in q and any(w in q for w in ("统计", "分布", "各", "多少个"))
+        return [{"name": "get_market_state_summary" if counts else "get_market_score_history",
+                 "args": dict(zip(("start", "end"), interval))}]
+    if single and any(word in q for word in ('评分', '状态', '得分')):
+        frame = registry.scores()
+        if single < frame.date.iloc[0] or single > frame.date.iloc[-1]:
+            return [{"name": "get_market_score_history", "args": {"start": single, "end": single}}]
+    dates = [single] if single else []
     strategy = next((s for s in ("动态评分", "LGB", "SASF", "PPO", "等权", "MVO", "风险平价", "动量", "沪深300") if s in q), None)
     if "PPO" in q and "月度" in q:
         strategy = "PPO月度"
@@ -112,7 +130,7 @@ def router(state):
     events = list(state.get("llm_events", []))
     try:
         response = get_llm().bind_tools(registry.TOOL_SCHEMAS).invoke([
-            SystemMessage(content="只选择回答问题必需的只读工具。日期、策略名称必须来自问题。规则/定义/为什么/流程/问卷/费率/PPO设计/文档口径/前视解释用search_docs，query保留原问题及其关键概念，尤其不得删去问题点名的文件名或文档别名。具体日期市场评分和策略回测指标用数据工具；两者都需要时同时调用。评分系统权重与满分是文档规则，不是最新市场评分；C1-C5产品匹配是文档规则，C2/C3/C4策略收益是get_risk_tier。实际北向缺口与特征维度用get_data_caveats；状态计数用get_market_state_summary。拒答问题可以查风险适当性或历史指标，不得推荐个股。禁止调用白名单外工具。"),
+            SystemMessage(content="只选择回答问题必需的只读工具。日期、策略名称必须来自问题。规则/定义/为什么/流程/问卷/费率/PPO设计/文档口径/前视解释用search_docs，query保留原问题及其关键概念，尤其不得删去问题点名的文件名或文档别名。具体日期市场评分和策略回测指标用数据工具；两者都需要时同时调用。评分系统权重与满分是文档规则，不是最新市场评分；C1-C5产品匹配是文档规则，C2/C3/C4策略收益是get_risk_tier。实际北向缺口与特征维度用get_data_caveats；状态天数统计用get_market_state_summary；两两或多个策略对比用compare_strategies，单策略指标用get_strategy_metrics；日期区间每日评分用get_market_score_history；单日或最新评分用get_market_score。拒答问题可以查风险适当性或历史指标，不得推荐个股。禁止调用白名单外工具。"),
             HumanMessage(content=state["question"] + ("\n上轮结果：" + json.dumps(state["tool_results"], ensure_ascii=False) if state["rounds"] else ""))])
         calls = response.tool_calls
         events.append({"stage": "router", "status": "success"})
@@ -125,7 +143,11 @@ def router(state):
     # Numeric-only questions must use their data tool rather than document prose.
     expected_data = data_fallback_calls(state['question'])
     if expected_data and not document_question(state['question']) and not refusal(state['question']):
-        calls = [c for c in calls if c.get('name') != 'search_docs']
+        if expected_data[0]['name'] in ('compare_strategies', 'get_market_score_history') or range_requested(state['question']):
+            # Date/compare arguments are deterministic and override a model's latest-score guess.
+            calls = list(expected_data)
+        else:
+            calls = [c for c in calls if c.get('name') != 'search_docs']
         for expected in expected_data:
             if not any(c.get('name') == expected['name'] for c in calls):
                 calls.append(expected)
@@ -171,6 +193,37 @@ def evidence_answer(question, results):
         if name == "get_market_score":
             parts.append(f"{result['as_of']} 总分 {fmt(data['total_score'])}，状态「{data['market_state']}」；" +
                          "，".join(f"{label} {fmt(data[key])}" for label, key in (("估值", "val_score"), ("宏观", "macro_score"), ("情绪", "sent_score"), ("趋势", "trend_score"))))
+        elif name == "compare_strategies":
+            labels = {"年化收益": "年化", "夏普比率": "夏普", "最大回撤": "回撤", "卡玛比率": "卡玛",
+                      "年化波动": "年化波动", "索提诺比率": "索提诺", "月均换手率": "换手", "胜率": "胜率",
+                      "权重集中度HHI": "HHI", "95%VaR": "VaR"}
+            wanted = [key for key, label in labels.items() if key in question or label in question]
+            # 年化波动 does not imply requesting annual return as well.
+            if "年化波动" in question and "年化收益" not in question and "年化收益" in wanted:
+                wanted.remove("年化收益")
+            metrics = wanted or ["年化收益", "夏普比率", "最大回撤", "卡玛比率"]
+            ratios = {"年化收益", "年化波动", "最大回撤", "月均换手率", "胜率", "95%VaR"}
+            for row in data['rows']:
+                parts.append(row['策略'] + '：' + '、'.join(labels[key] + fmt(row[key], key in ratios) for key in metrics))
+        elif name == "get_market_score_history":
+            if data['mode'] == 'summary':
+                summary = data['summary']
+                def item(key):
+                    row = summary[key]
+                    return row['date'] + ' ' + fmt(row['total_score']) + row.get('market_state', '')
+                parts.append(f"{summary['start_date']}至{summary['end_date']}，{data['total_days']}个交易日；"
+                             + '；'.join(label + item(key) for label, key in (("首", "first"), ("末", "last"), ("最高", "max"), ("最低", "min")))
+                             + '；均值' + fmt(summary['mean_total']) + '；'
+                             + '、'.join(f"{key}{value}天" for key, value in summary['state_counts'].items())
+                             + '；区间超过10个交易日，请缩小范围查看每日明细')
+            else:
+                lines = []
+                for row in data['rows']:
+                    line = row['date'] + ' ' + fmt(row['total_score']) + row['market_state']
+                    if data['mode'] == 'detail':
+                        line += '(' + '/'.join(fmt(row[key]) for key in ('val_score', 'macro_score', 'sent_score', 'trend_score')) + ')'
+                    lines.append(line)
+                parts.append(('括号依次为估值/宏观/情绪/趋势：' if data['mode'] == 'detail' else '') + '；'.join(lines))
         elif name == "get_market_state_summary":
             parts.append("；".join(f"{k} {v} 天" for k, v in data["counts"].items()) + f"；合计 {data['total_days']} 天")
         elif name == "get_data_caveats":
@@ -230,6 +283,8 @@ def compose(state):
                    "data/clean/market_score_daily.csv")
         sources.sort(key=lambda source: source != primary)
     answer = evidence_answer(state["question"], usable)
+    if not usable:
+        answer = history_error(state["tool_results"], state["question"]) or answer
     if refusal(state["question"]):
         answer = POLICY + (evidence_answer(state["question"], [r for r in usable if r["tool"] == "search_docs"]) if docs else "")
     elif usable:
@@ -243,7 +298,7 @@ def compose(state):
                 else:
                     evidence.append(result)
             response = get_llm().invoke([
-                SystemMessage(content="只用提供的tool_results回答，数字只能来自证据。中文简洁回答，正文不超过140字；引用和免责声明也计入总长300字。直接列短语，省略重复题目和文档全名。解释设计稿与最终代码差异时，须压缩保留证据中的全部关键差异（正向基准、惩罚项、附加奖励、裁剪），不得只列前三项。引用单独放末尾，不在正文重复免责声明。仅回答市场评分分项时使用估值/宏观/情绪/趋势标签。其他问题保留原主题名称，不强加评分标签。累计收益、年化收益、最大回撤、年化波动等比例字段，原始小数乘100写成百分比，保留两位小数，避免一位小数损失原始精度；夏普/卡玛/索提诺保留比率原值。市场评分和分项使用分制；交易日、维度/列数、天数、排名使用计数单位，均不得加百分号。问题点名某文档时，先回答该文档的内容，不得用另一文档替代；若与权威手册或最终代码不一致，须用一句话说明差异并明确“最终以代码为准”。文档解释至少逐字复制一条chunk的citation字段，包括文件名、章节、空格和方括号，不得自行改写、拼接或使用text内的旧引用，不得编造引用；混合问题即使已有数据工具的[source:]，也必须引用chunk的citation，不能用数据引用替代文档引用。多个来源优先引用被点名文档，涉及最终代码差异时也引用最终代码依据；选择直接支持答案的章节。文档中的数字仅authoritative可用，background/historical只解释背景，不得引用其事实数字。旧值/禁用清单只可标为旧值，不得作为当前事实。涉及数据口径时说明实际数据以数据工具为准。公式优先逐字照录权威原文，系数保留原文小数位，不能省略零系数或成本说明。发现文档算术矛盾时仅说明矛盾并照录原值，不得计算或写出证据没有的合计数。不提供个性化投资建议。"),
+                SystemMessage(content="只用提供的tool_results回答，数字只能来自证据。策略对比只列请求策略；未点名指标默认年化收益、夏普比率、最大回撤、卡玛比率。日期区间按mode输出：detail含全部每日分项，compact含全部每日总分状态，summary含首末、极值、均值、状态分布及缩小范围提示；不得编造未返回的日期或数字。中文简洁回答，正文不超过140字；引用和免责声明也计入总长300字。直接列短语，省略重复题目和文档全名。解释设计稿与最终代码差异时，须压缩保留证据中的全部关键差异（正向基准、惩罚项、附加奖励、裁剪），不得只列前三项。引用单独放末尾，不在正文重复免责声明。仅回答市场评分分项时使用估值/宏观/情绪/趋势标签。其他问题保留原主题名称，不强加评分标签。累计收益、年化收益、最大回撤、年化波动等比例字段，原始小数乘100写成百分比，保留两位小数，避免一位小数损失原始精度；夏普/卡玛/索提诺保留比率原值。市场评分和分项使用分制；交易日、维度/列数、天数、排名使用计数单位，均不得加百分号。问题点名某文档时，先回答该文档的内容，不得用另一文档替代；若与权威手册或最终代码不一致，须用一句话说明差异并明确“最终以代码为准”。文档解释至少逐字复制一条chunk的citation字段，包括文件名、章节、空格和方括号，不得自行改写、拼接或使用text内的旧引用，不得编造引用；混合问题即使已有数据工具的[source:]，也必须引用chunk的citation，不能用数据引用替代文档引用。多个来源优先引用被点名文档，涉及最终代码差异时也引用最终代码依据；选择直接支持答案的章节。文档中的数字仅authoritative可用，background/historical只解释背景，不得引用其事实数字。旧值/禁用清单只可标为旧值，不得作为当前事实。涉及数据口径时说明实际数据以数据工具为准。公式优先逐字照录权威原文，系数保留原文小数位，不能省略零系数或成本说明。发现文档算术矛盾时仅说明矛盾并照录原值，不得计算或写出证据没有的合计数。不提供个性化投资建议。"),
                 HumanMessage(content=json.dumps({"question": state["question"], "tool_results": evidence,
                                                  "correction": state.get("correction", "")}, ensure_ascii=False))])
             events.append({"stage": "compose", "status": "success"})
@@ -252,6 +307,9 @@ def compose(state):
         except Exception as exc:
             events.append({"stage": "compose", "status": "error", "error": type(exc).__name__})
             log.warning("compose LLM failed: %s", type(exc).__name__)
+    if not refusal(state['question']) and not docs and any(
+            r['tool'] in ('compare_strategies', 'get_market_score_history') for r in data_results):
+        answer = evidence_answer(state['question'], data_results)
     if "北向" in state["question"] and any(r["tool"] == "get_data_caveats" for r in usable) and "北向" not in answer:
         answer = "北向资金：" + answer
     # Preserve the requested identity of structured rows, including tiers and crises.

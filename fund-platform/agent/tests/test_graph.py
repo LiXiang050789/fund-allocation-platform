@@ -93,7 +93,14 @@ def test_api(monkeypatch, tmp_path):
     monkeypatch.setattr(api, 'validate', lambda *_: {'backend': 'hybrid'})
     assert client.get('/healthz').json()['rag_enabled'] is True
     assert client.get('/healthz').json()['vector_rag_enabled'] == api.settings.enable_vector_rag
-    assert len(client.get('/tools').json()) == 9
+    tools = client.get('/tools').json()
+    assert len(tools) == 11
+    assert {item['name'] for item in tools} == {
+        'get_market_score', 'get_market_state_summary', 'get_strategy_metrics',
+        'get_segment_performance', 'get_drawdown_recovery', 'get_risk_tier',
+        'get_feature_importance', 'get_data_caveats', 'search_docs',
+        'compare_strategies', 'get_market_score_history',
+    }
     monkeypatch.setattr(registry, 'settings', dataclasses.replace(registry.settings, score_path=tmp_path/'missing.csv'))
     data = client.post('/chat', json={'question': '最新评分'}).json()
     assert not data['tool_calls'][0]['ok'] and '当前数据无法回答' in data['answer']

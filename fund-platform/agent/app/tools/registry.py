@@ -135,6 +135,86 @@ def get_strategy_metrics(strategy: str | None = None):
     return {"rows": records(df)}, scores().date.iloc[-1]
 
 
+STRATEGY_ALIASES = {
+    "LGB": ("LGB融合",), "LGB融合": ("LGB融合",),
+    "SASF": ("SASF硬切换",), "SASF硬切换": ("SASF硬切换",),
+    "PPO": ("PPO月度", "PPO原生日频"), "PPO月度": ("PPO月度",),
+    "PPO原生": ("PPO原生日频",), "PPO原生日频": ("PPO原生日频",),
+    **{name: (name,) for name in ("动态评分", "沪深300", "等权", "风险平价", "MVO", "动量")},
+}
+
+
+def expand_strategies(strategies):
+    expanded = []
+    for strategy in strategies:
+        key = re.sub(r"\s+", "", strategy).upper()
+        if key not in STRATEGY_ALIASES:
+            available = list(dict.fromkeys(name for names in STRATEGY_ALIASES.values() for name in names))
+            raise ValueError(f"未知策略：{strategy}；可用策略：{'、'.join(available)}")
+        expanded.extend(STRATEGY_ALIASES[key])
+    return list(dict.fromkeys(expanded))
+
+
+def strategies_in_question(question):
+    # Longest aliases consume their whole span, so PPO月度 never expands as bare PPO.
+    pattern = '|'.join(re.escape(name) for name in sorted(STRATEGY_ALIASES, key=len, reverse=True))
+    return expand_strategies(re.findall(pattern, re.sub(r"\s+", "", question).upper()))
+
+
+@tool("results/backtest/all_strategy_metrics.csv")
+def compare_strategies(strategies: list[str]):
+    """按请求顺序对比2至4个策略的CSV指标；PPO同时展开月度与原生日频。"""
+    names = expand_strategies(strategies)
+    if len(names) < 2:
+        raise ValueError("对比至少需要两个策略")
+    if len(names) > 4:
+        raise ValueError("一次最多对比四个策略")
+    df = table("results/backtest/all_strategy_metrics.csv")
+    rows = []
+    for name in names:
+        selected = df[df['策略'].eq(name)]
+        if len(selected) != 1:
+            raise ValueError(f"策略指标行缺失或不唯一：{name}")
+        rows.extend(records(selected))
+    return {"rows": rows}, scores().date.iloc[-1]
+
+
+@tool("data/clean/market_score_daily.csv")
+def get_market_score_history(start: str, end: str):
+    """精确查询交易日评分区间：最多5日分项、10日总分，长区间返回汇总。"""
+    if not all(re.fullmatch(r"\d{4}-\d{2}-\d{2}", value) for value in (start, end)):
+        raise ValueError("日期必须为YYYY-MM-DD")
+    try:
+        start, end = iso(start), iso(end)
+    except ValueError as exc:
+        raise ValueError("日期无效，请使用有效年月日") from exc
+    if start > end:
+        raise ValueError("起止日期倒置")
+    df = scores()
+    first_date, last_date = df.date.iloc[0], df.date.iloc[-1]
+    if start < first_date or end > last_date:
+        raise ValueError(f"日期越界：可用范围 {first_date} 至 {last_date}")
+    df = df[df.date.between(start, end)]
+    if df.empty:
+        raise ValueError("区间内无交易日")
+    columns = ['date', 'total_score', 'market_state']
+    count = len(df)
+    mode = 'detail' if count <= 5 else 'compact' if count <= 10 else 'summary'
+    data = dict(mode=mode, total_days=count, rows=[])
+    if mode != 'summary':
+        data['rows'] = records(df[columns + (['val_score', 'macro_score', 'sent_score', 'trend_score'] if mode == 'detail' else [])])
+    else:
+        counts = df.market_state.value_counts()
+        data['summary'] = dict(
+            start_date=start, end_date=end,
+            first=records(df[columns].head(1))[0], last=records(df[columns].tail(1))[0],
+            max=records(df.loc[[df.total_score.idxmax()], ['date', 'total_score']])[0],
+            min=records(df.loc[[df.total_score.idxmin()], ['date', 'total_score']])[0],
+            mean_total=round(float(df.total_score.mean()), 2),
+            state_counts={state: int(counts.get(state, 0)) for state in ('震荡', '震荡偏强', '下行', '上行', '极寒')})
+    return data, df.date.iloc[-1]
+
+
 @tool("results/backtest/segment_all_strategy.csv")
 def get_segment_performance(segment: str | None = None):
     """查询六阶段内各策略的累计收益、年化收益、最大回撤。"""

@@ -4,6 +4,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from app.graph import POLICY
+from app.dates import range_requested
 
 IDENTITY = (
     "我是平台内置投研 AI 助手。可以查询市场评分与状态、十策略指标、分段表现、风险档、"
@@ -41,7 +42,7 @@ def classify(question, history=()):
     if special_answer(question) is not None:
         return "chat"
     upper = question.upper()
-    if any(entity in upper for entity in ENTITIES):
+    if range_requested(question) or any(entity in upper for entity in ENTITIES):
         return "research"
     if FOLLOWUP.search(question) and any(m.get("mode") == "research" for m in history[-4:]):
         return "research"

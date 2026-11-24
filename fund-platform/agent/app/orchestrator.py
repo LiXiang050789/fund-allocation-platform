@@ -3,6 +3,7 @@ import json
 import logging
 import time
 from app import chat as general
+from app.dates import history_error
 from app.intent import classify, special_answer, rewrite_question, CLARIFY, NO_EVIDENCE, POLICY
 
 log = logging.getLogger(__name__)
@@ -41,7 +42,8 @@ class Orchestrator:
 
     def research_result(self, state, thread_id, start):
         if not any(row.get('ok') for row in state.get('tool_results', [])):
-            state = state | dict(answer=NO_EVIDENCE, verified=False, citations=[])
+            message = history_error(state.get('tool_results', []), state.get('question', ''))
+            state = state | dict(answer=(message + "不构成投资建议。") if message else NO_EVIDENCE, verified=False, citations=[])
         elif not state.get('verified'):
             # Never disclose graph's unchecked numerical draft over HTTP/SSE.
             state = state | dict(answer='证据校验未通过，请补充具体问题或重试。不构成投资建议。', citations=[])
