@@ -356,4 +356,6 @@ Phase 6 当前证据和未验证项见 [`eval/phase6_evidence.md`](eval/phase6_e
 离线回归：在 `agent/` 执行 `.venv/bin/python eval/run_offline_tests.py -q`。
 详细测试、样例与浏览器证据见 [Phase 7 P0 证据](eval/phase7_p0_evidence.md)。
 本轮不运行真实模型评测，不改既有 25/16/12 题评测产物。P1 净值、PPO 权重和流水线 IC 不在本轮范围。
-长区间仅汇总；服务仍为单 worker、无鉴权的受信本机演示。未 push。
+长区间仅汇总；服务仍为单 worker、无鉴权的受信本机演示。
+
+验收补充（2026-11-24）：独立复跑 284 项离线测试；补修“截至/截止”单日评分误判为区间（提交 `e8adcf19`）。P0 提交推送状态以 `origin/master` 为准。真实模型未复跑，P1 净值、PPO 缓存权重与流水线 IC 尚未实现。
