@@ -6,6 +6,7 @@ import functools
 import inspect
 import json
 import logging
+import math
 import re
 import time
 from datetime import date as Date
@@ -287,6 +288,88 @@ def get_data_caveats():
                 zero_rows=len(zero), last_valid_date=valid.date.iloc[-1] if len(valid) else None,
                 macro_lag=lag, dimensions=dimensions, months_since_cutoff=months,
                 caveat="仅为历史回测演示数据，不是实时行情；宏观月度指标按交易日滞后以防前视"), df.date.iloc[-1]
+
+
+ETF_CN = dict(zip(('hs300', 'zz500', 'kc50', 'consume', 'chip', 'gold', 'bond10'),
+                 ('沪深300', '中证500', '科创50', '消费', '芯片', '黄金', '十年国债')))
+
+
+def strict_date(value):
+    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', value):
+        raise ValueError('日期必须为YYYY-MM-DD')
+    try:
+        return iso(value)
+    except ValueError as exc:
+        raise ValueError('日期无效') from exc
+
+
+@tool('results/backtest/all_strategy_nav.csv')
+def get_strategy_nav(strategies: list[str] | None = None, date: str | None = None,
+                     start: str | None = None, end: str | None = None):
+    """只读策略组合市值净值，精确日期；短区间每日、长区间首末极值及倍数。"""
+    df = table('results/backtest/all_strategy_nav.csv').sort_values('date')
+    names = expand_strategies(strategies) if strategies else list(df.columns.drop('date'))
+    if strategies and len(names) > 4:
+        raise ValueError('一次最多查询四个策略')
+    if any(name not in df.columns for name in names):
+        raise ValueError('未知策略；可选值：' + '、'.join(df.columns.drop('date')))
+    if date is not None and (start is not None or end is not None):
+        raise ValueError('参数冲突：date不能与区间同时使用')
+    if (start is None) != (end is None):
+        raise ValueError('start/end必须同时提供')
+    base = df.iloc[0]
+    if date is not None:
+        date = strict_date(date)
+        chosen = df[df.date.eq(date)]
+        if chosen.empty:
+            raise ValueError('非交易日或日期越界')
+        mode = 'date'
+    elif start is not None:
+        start, end = strict_date(start), strict_date(end)
+        if start > end:
+            raise ValueError('起止日期倒置')
+        if start < df.date.iloc[0] or end > df.date.iloc[-1]:
+            raise ValueError('非交易日或日期越界')
+        chosen = df[df.date.between(start, end)]
+        if chosen.empty:
+            raise ValueError('区间内无交易日')
+        mode = 'detail' if len(chosen) <= 5 else 'summary'
+    else:
+        chosen, mode = df.tail(1), 'latest'
+    first, last = chosen.iloc[0], chosen.iloc[-1]
+    data = dict(mode=mode, strategies=names, total_days=len(chosen),
+                rows=records(chosen[['date'] + names]) if mode != 'summary' else [],
+                start_date=first['date'], end_date=last['date'], summary={},
+                multiples={name: round(float(last[name] / base[name]), 4) for name in names})
+    if mode == 'summary':
+        for name in names:
+            data['summary'][name] = dict(start_nav=float(first[name]), end_nav=float(last[name]),
+                max=dict(date=chosen.loc[chosen[name].idxmax(), 'date'], nav=float(chosen[name].max())),
+                min=dict(date=chosen.loc[chosen[name].idxmin(), 'date'], nav=float(chosen[name].min())),
+                range_multiple=round(float(last[name] / first[name]), 4))
+    return data, last['date']
+
+
+@tool('results/ppo_weight2.csv')
+def get_ppo_cached_weights(date: str | None = None):
+    """只读PPO缓存权重；请求日期无记录时使用不晚于该日的最近缓存，并披露实际日期。"""
+    df = table('results/ppo_weight2.csv').sort_values('date')
+    latest = df.date.iloc[-1]
+    requested = strict_date(date) if date is not None else None
+    if requested is not None:
+        df = df[df.date.le(requested)]
+    if df.empty:
+        raise ValueError('日期越界：早于首个权重日期')
+    row = df.iloc[-1]
+    weights = {code: float(row[code]) for code in ETF_CN}
+    total = sum(weights.values())
+    if not all(math.isfinite(value) for value in weights.values()) or abs(total - 1) > 1e-2:
+        raise ValueError('PPO 权重总和异常')
+    return dict(date=row['date'], requested_date=requested,
+                exact=requested is None or row['date'] == requested,
+                weights=weights, weights_cn={ETF_CN[code]: value for code, value in weights.items()},
+                weight_sum=round(total, 6), min_weight=round(min(weights.values()), 6),
+                latest_available=latest), row['date']
 
 
 @tool("")
