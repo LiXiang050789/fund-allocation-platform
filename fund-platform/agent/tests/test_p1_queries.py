@@ -120,3 +120,125 @@ def test_ppo_corrupt_weights(monkeypatch,value):
     monkeypatch.setattr(t,'table',corrupt)
     r=t.get_ppo_cached_weights()
     assert not r['ok'] and 'PPO 权重总和异常' in r['error']
+
+
+def test_pipeline_real_artifacts(no_execution):
+    r=t.get_pipeline_status()
+    assert r['ok'],r['error']
+    assert r['as_of']=='2026-07-10'
+    d=r['data']
+    assert [item['name'] for item in d['files']]==['data/raw 目录','数据汇总.xlsx','train_total_feature','train_feature_filtered','train_feature_filtered_ppo','etf_price_clean','market_score_daily','global_best.zip','feature_importance','pred_return_lgb_daily','ppo_weight','all_strategy_metrics']
+    assert d['files_ready']==sum(item['ok'] for item in d['files'])==12
+    assert d['files_total']==12
+    assert [item['name'] for item in d['semantics']]==['PPO 两行存在','PPO 特征 44 维','PPO 权重和≈1']
+    assert d['semantics_ready']==sum(item['ok'] for item in d['semantics'])==3
+    assert d['semantics_total']==3
+    assert d['raw_files']==69 and d['clean_csvs']==20
+    for name,cols in [('etf_price_clean',15),('train_total_feature',182),('market_score_daily',7),('valuation_merged',29),('tech_factor_clean',78),('macro_merged',33)]:
+        assert d['shapes'][name]==dict(rows=2798,cols=cols,encoding='GBK' if name=='train_total_feature' else 'UTF-8-SIG',shape=f'2798×{cols}')
+    assert [d['feature_shapes'][name]['shape'] for name in ('train_total_feature','train_feature_filtered','train_feature_filtered_ppo')]==['2798×182','2798×38','2798×45']
+    assert d['top_feature']==dict(feature='bond_10y_2y_spread',importance=.1962)
+    assert d['lgb_pred_count']==7504
+    assert d['annual_ic']=={'2022':.2317,'2023':.2707,'2024':.0356,'2025':-.3316,'2026':.0162}
+    assert d['ppo_weight']==dict(date='2026-07-09',sum=1.0,min=.122609)
+    assert d['protocol']==dict(SLIPPAGE=.0005,FEE=.001,MAX_WEIGHT=.30)
+    assert '/home/' not in str(d)
+
+
+@pytest.mark.parametrize('script', ['FEE=.001\nMAX_WEIGHT=.3', 'SLIPPAGE=.0005\nSLIPPAGE=.0005\nFEE=.001\nMAX_WEIGHT=.3','SLIPPAGE=unknown\nFEE=.001\nMAX_WEIGHT=.3','SLIPPAGE=True\nFEE=.001\nMAX_WEIGHT=.3'])
+def test_protocol_invalid(monkeypatch,tmp_path,script):
+    (tmp_path/'scripts').mkdir()
+    (tmp_path/'scripts/backtest_unified.py').write_text(script)
+    monkeypatch.setattr(t,'settings',dataclasses.replace(t.settings,platform_dir=tmp_path))
+    r=t.get_pipeline_status()
+    assert not r['ok'] and r['data']=={} and r['as_of'] is None
+    assert '无法唯一解析回测成本常量' in r['error']
+
+
+def test_pipeline_missing_product(monkeypatch,tmp_path):
+    root=t.settings.platform_dir
+    for path in ['data/raw','scripts/backtest_unified.py','models/H_equity_residual_best.zip']+[f'data/clean/{name}.csv' for name in ('train_total_feature','train_feature_filtered','train_feature_filtered_ppo','etf_price_clean','market_score_daily','valuation_merged','tech_factor_clean','macro_merged')]+['results/feature_importance.csv','results/ppo_weight2.csv','results/backtest/all_strategy_metrics.csv']:
+        dest=tmp_path/path
+        dest.parent.mkdir(parents=True,exist_ok=True)
+        dest.symlink_to(root/path, target_is_directory=(root/path).is_dir())
+    monkeypatch.setattr(t,'settings',dataclasses.replace(t.settings,platform_dir=tmp_path))
+    r=t.get_pipeline_status()
+    assert r['ok'],r['error']
+    assert r['data']['files_ready']==11 and r['data']['lgb_pred_count']==0
+    assert r['data']['annual_ic']=={}
+    assert not next(item['ok'] for item in r['data']['files'] if item['name']=='pred_return_lgb_daily')
+
+
+def test_pipeline_unreadable_weight(monkeypatch):
+    original=t.table
+    def missing(path,**kwargs):
+        if path=='results/ppo_weight2.csv':raise FileNotFoundError('fixture')
+        return original(path,**kwargs)
+    monkeypatch.setattr(t,'table',missing)
+    r=t.get_pipeline_status()
+    assert r['ok'] and r['data']['ppo_weight'] is None
+    assert r['data']['semantics_ready']==2
+
+
+def test_ic_zero_variance_and_missing():
+    import pandas as pd
+    dates=pd.date_range('2022-01-01',periods=30)
+    pred=pd.DataFrame({'date':dates,**{code:[1.]*30 for code in t.ETF_CN}})
+    price=pd.DataFrame({'date':dates,**{code:[1.]*30 for code in t.ETF_CN}})
+    assert t._annual_ic(pred,price)=={'2022':0.0}
+    assert t._annual_ic(pred.head(1),price)=={'2022':0.0}
+    assert t._annual_ic(None,price)=={}
+
+
+@pytest.mark.parametrize('level,equity,navs',[('C2',.2,[2.44,2.31]),('C3',.5,[4.48,4.18]),('C4',.7,[4.81,4.66]),('保守',.2,[2.44,2.31]),('平衡',.5,[4.48,4.18]),('进取',.7,[4.81,4.66])])
+def test_risk_tier_details(level,equity,navs):
+    r=t.get_risk_tier_detail(level)
+    assert r['ok'],r['error']
+    d=r['data']
+    assert r['source']=='results/risk_tiers.csv' and r['as_of']=='2026-07-10'
+    assert [row['最终净值'] for row in d['rows']]==navs
+    assert d['equity_center']==equity
+    assert list(d['recommended_weights'].values())==pytest.approx([equity/5]*5+[(1-equity)/2]*2)
+    assert sum(d['recommended_weights'].values())==pytest.approx(1)
+
+
+@pytest.mark.parametrize('level,strategy,annual,sharpe,drawdown,nav', [
+    ('C2','动态评分',.0859,.5336,-.0972,2.44),('C3','动态评分',.1614,.5243,-.2144,4.48),('C4','动态评分',.173,.5311,-.3099,4.81),
+    ('C2','LGB',.079,.6263,-.1026,2.31),('C3','LGB融合',.1458,.6118,-.2183,4.18),('C4','LGB',.1596,.62,-.277,4.66)])
+def test_risk_single_rows(level,strategy,annual,sharpe,drawdown,nav):
+    r=t.get_risk_tier_detail(level,strategy)
+    assert r['ok'],r['error']
+    assert len(r['data']['rows'])==1
+    row=r['data']['rows'][0]
+    assert [row[key] for key in ('年化收益','夏普比率','最大回撤','最终净值')]==[annual,sharpe,drawdown,nav]
+
+
+@pytest.mark.parametrize('args',[{'level':'C1'},{'level':'C22'},{'strategy':'SASF'},{'strategy':'未知'}])
+def test_risk_errors(args):
+    r=t.get_risk_tier_detail(**args)
+    assert not r['ok'] and '可选值' in r['error'] or (not r['ok'] and '可用策略' in r['error'])
+    assert r['data']=={} and r['as_of'] is None
+
+
+def test_risk_multi_and_old_source():
+    d=t.get_risk_tier_detail()['data']
+    assert len(d['rows'])==6
+    assert 'recommended_weights' not in d and 'equity_center' not in d
+    r=t.get_risk_tier('C2','LGB')
+    assert r['source']=='results/risk_levels_metrics.csv'
+    original=t.records(t.select(t.select(t.table('results/risk_levels_metrics.csv'),'风险档','C2'),'策略源','LGB'))
+    assert r['data']['rows']==original
+
+
+def test_state_percentages_and_ratio_extension():
+    d=t.get_market_state_summary()['data']
+    assert d['counts']==dict(震荡=1317,震荡偏强=756,下行=580,上行=106,极寒=39)
+    assert d['total_days']==2798
+    assert d['percentages']=={state:round(count/2798*100,1) for state,count in d['counts'].items()}
+    assert sum(d['percentages'].values())==pytest.approx(100,abs=.2)
+    compared=t.compare_strategies(['动态评分','LGB'])['data']['rows']
+    metrics=t.get_strategy_metrics()['data']['rows']
+    for row in compared:
+        assert row==next(item for item in metrics if item['策略']==row['策略'])
+        assert row['年化收益/最大回撤']==round(row['年化收益']/abs(row['最大回撤']),4)
+    assert [row['年化收益/最大回撤'] for row in compared]==[.9201,.7983]

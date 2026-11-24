@@ -126,14 +126,23 @@ def get_market_state_summary(start: str | None = None, end: str | None = None):
     counts = df.market_state.value_counts()
     latest = records(df[["date", "total_score", "market_state"]].tail(1))[0]
     return dict(counts={s: int(counts.get(s, 0)) for s in ("震荡", "震荡偏强", "下行", "上行", "极寒")},
+                percentages={s: round(int(counts.get(s, 0))/len(df)*100, 1) for s in ("震荡", "震荡偏强", "下行", "上行", "极寒")},
                 total_days=len(df), latest=latest), latest["date"]
+
+
+def metric_records(df):
+    rows = records(df)
+    for row in rows:
+        denominator = abs(row['最大回撤'])
+        row['年化收益/最大回撤'] = round(row['年化收益']/denominator, 4) if denominator else None
+    return rows
 
 
 @tool("results/backtest/all_strategy_metrics.csv")
 def get_strategy_metrics(strategy: str | None = None):
     """查询十种策略的全区间收益、波动、夏普、回撤和卡玛指标。"""
     df = select(table("results/backtest/all_strategy_metrics.csv"), "策略", strategy)
-    return {"rows": records(df)}, scores().date.iloc[-1]
+    return {"rows": metric_records(df)}, scores().date.iloc[-1]
 
 
 STRATEGY_ALIASES = {
@@ -176,7 +185,7 @@ def compare_strategies(strategies: list[str]):
         selected = df[df['策略'].eq(name)]
         if len(selected) != 1:
             raise ValueError(f"策略指标行缺失或不唯一：{name}")
-        rows.extend(records(selected))
+        rows.extend(metric_records(selected))
     return {"rows": rows}, scores().date.iloc[-1]
 
 
@@ -370,6 +379,132 @@ def get_ppo_cached_weights(date: str | None = None):
                 weights=weights, weights_cn={ETF_CN[code]: value for code, value in weights.items()},
                 weight_sum=round(total, 6), min_weight=round(min(weights.values()), 6),
                 latest_available=latest), row['date']
+
+
+def _optional_table(relative, *, encoding='utf-8-sig'):
+    try:
+        return table(relative, encoding=encoding)
+    except (OSError, ValueError, UnicodeError, pd.errors.ParserError):
+        return None
+
+
+def _backtest_protocol():
+    try:
+        tree = ast.parse((settings.platform_dir / 'scripts/backtest_unified.py').read_text(encoding='utf-8-sig'))
+        result = {}
+        for name in ('SLIPPAGE', 'FEE', 'MAX_WEIGHT'):
+            matches = []
+            for node in ast.walk(tree):
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target] if isinstance(node, (ast.AnnAssign, ast.AugAssign)) else []
+                if any(isinstance(child, ast.Name) and child.id == name for target in targets for child in ast.walk(target)):
+                    matches.append(node.value)
+            if len(matches) != 1:
+                raise ValueError(name)
+            value = ast.literal_eval(matches[0])
+            if type(value) not in (int, float) or not math.isfinite(value):
+                raise ValueError(name)
+            result[name] = value
+        return result
+    except (OSError, SyntaxError, ValueError, TypeError) as exc:
+        raise ValueError('无法唯一解析回测成本常量') from exc
+
+
+def _annual_ic(pred, price):
+    if pred is None or price is None:
+        return {}
+    pred, price = pred.copy(), price.copy()
+    pred['date'], price['date'] = pd.to_datetime(pred.date), pd.to_datetime(price.date)
+    future = price.set_index('date')[list(ETF_CN)]
+    future = (future.shift(-21) / future - 1).reset_index()
+    merged = pred.merge(future, on='date', suffixes=('_pred', '_ret'))
+    result = {}
+    for year, group in merged.groupby(merged.date.dt.year):
+        if not 2022 <= year <= 2026:
+            continue
+        correlations = []
+        for code in ETF_CN:
+            pair = group[[code+'_pred', code+'_ret']].dropna()
+            a, b = pair.iloc[:, 0], pair.iloc[:, 1]
+            value = 0.0 if len(pair) < 2 or abs(a.std()) <= 1e-8 or abs(b.std()) <= 1e-8 else float(a.corr(b))
+            correlations.append(value)
+        result[str(year)] = round(sum(correlations)/len(ETF_CN), 4)
+    return result
+
+
+@tool('data/clean/market_score_daily.csv; results/pred_return_lgb_daily.csv; results/ppo_weight2.csv; scripts/backtest_unified.py')
+def get_pipeline_status():
+    """只读12项文件、3项语义、主表形状、预测/年度IC及AST回测成本，不执行流水线。"""
+    protocol = _backtest_protocol()
+    paths = [
+        ('data/raw 目录', 'data/raw'), ('数据汇总.xlsx', 'data/raw/数据汇总.xlsx'),
+        *[(name, 'data/clean/'+name+'.csv') for name in ('train_total_feature', 'train_feature_filtered', 'train_feature_filtered_ppo', 'etf_price_clean', 'market_score_daily')],
+        ('global_best.zip', 'models/H_equity_residual_best.zip'),
+        ('feature_importance', 'results/feature_importance.csv'),
+        ('pred_return_lgb_daily', 'results/pred_return_lgb_daily.csv'),
+        ('ppo_weight', 'results/ppo_weight2.csv'),
+        ('all_strategy_metrics', 'results/backtest/all_strategy_metrics.csv')]
+    files = [dict(name=name, ok=(settings.platform_dir/path).is_dir() if name=='data/raw 目录' else (settings.platform_dir/path).is_file()) for name, path in paths]
+    shape_names = ('etf_price_clean', 'train_total_feature', 'market_score_daily', 'valuation_merged', 'tech_factor_clean', 'macro_merged', 'train_feature_filtered', 'train_feature_filtered_ppo')
+    frames, shapes = {}, {}
+    for name in shape_names:
+        encoding = 'gbk' if name == 'train_total_feature' else 'utf-8-sig'
+        frame = _optional_table('data/clean/'+name+'.csv', encoding=encoding)
+        frames[name] = frame
+        shapes[name] = (dict(rows=len(frame), cols=len(frame.columns), encoding=encoding.upper(), shape=f'{len(frame)}×{len(frame.columns)}') if frame is not None else None)
+    metrics = _optional_table('results/backtest/all_strategy_metrics.csv')
+    weights = _optional_table('results/ppo_weight2.csv')
+    weight = None
+    if weights is not None and not weights.empty:
+        row = weights.sort_values('date').iloc[-1]
+        values = row[list(ETF_CN)].astype(float)
+        if values.notna().all() and all(math.isfinite(value) for value in values):
+            weight = dict(date=row['date'], sum=round(float(values.sum()),6), min=round(float(values.min()),6))
+            weight_exact_sum = float(values.sum())
+    ppo_features = frames['train_feature_filtered_ppo']
+    semantics = [dict(name='PPO 两行存在',ok=metrics is not None and {'PPO月度','PPO原生日频'}.issubset(set(metrics['策略']))),
+                 dict(name='PPO 特征 44 维',ok=ppo_features is not None and len(ppo_features.columns.drop('date', errors='ignore'))==44),
+                 dict(name='PPO 权重和≈1',ok=weight is not None and abs(weight_exact_sum-1)<=1e-3)]
+    importance = _optional_table('results/feature_importance.csv')
+    top = dict(feature=str(importance.iloc[0]['feature']), importance=round(float(importance.iloc[0]['importance']),4)) if importance is not None and not importance.empty else None
+    pred = _optional_table('results/pred_return_lgb_daily.csv')
+    market = frames['market_score_daily']
+    raw_dir, clean_dir = settings.platform_dir/'data/raw', settings.platform_dir/'data/clean'
+    return dict(files_ready=sum(item['ok'] for item in files), files_total=len(files), files=files,
+        semantics_ready=sum(item['ok'] for item in semantics), semantics_total=len(semantics), semantics=semantics,
+        raw_files=sum(path.is_file() for path in raw_dir.rglob('*')) if raw_dir.is_dir() else 0,
+        clean_csvs=sum(path.is_file() for path in clean_dir.glob('*.csv')),
+        shapes={name: shapes[name] for name in shape_names[:6]},
+        feature_shapes={name: shapes[name] for name in ('train_total_feature','train_feature_filtered','train_feature_filtered_ppo')},
+        top_feature=top, lgb_pred_count=int(pred.drop(columns='date').notna().sum().sum()) if pred is not None else 0,
+        annual_ic=_annual_ic(pred, frames['etf_price_clean']), ppo_weight=weight, protocol=protocol), market.date.max() if market is not None and not market.empty else None
+
+
+@tool('results/risk_tiers.csv')
+def get_risk_tier_detail(level: str | None = None, strategy: str | None = None):
+    """只读风险档组合的最终净值与静态ETF配置，独立于统一回测净值序列。"""
+    df = table('results/risk_tiers.csv')
+    if level is not None:
+        key = level.replace(' ', '').upper()
+        levels = {alias: tier for tier, chinese in (('C2','保守'),('C3','平衡'),('C4','进取'))
+                  for alias in (tier, chinese, chinese+'型', chinese+'型'+tier)}
+        if key not in levels:
+            raise ValueError('未知风险档；可选值：C2/保守、C3/平衡、C4/进取')
+        df = df[df['风险档'].str.contains(levels[key], regex=False)]
+    if strategy is not None:
+        try:
+            names = expand_strategies([strategy])
+        except ValueError as exc:
+            raise ValueError('未知策略；可选值：动态评分、LGB融合') from exc
+        if len(names) != 1 or names[0] not in ('动态评分', 'LGB融合'):
+            raise ValueError('未知策略；可选值：动态评分、LGB融合')
+        df = df[df['策略'].eq(names[0])]
+    if df.empty:
+        raise ValueError('未知风险档或策略；可选值：C2/C3/C4、动态评分/LGB融合')
+    data = dict(rows=records(df))
+    if df['风险档'].nunique() == 1:
+        equity = float(df['权益中枢%'].iloc[0]) / 100
+        data.update(equity_center=equity, recommended_weights={name: equity/5 if index < 5 else (1-equity)/2 for index,name in enumerate(ETF_CN.values())})
+    return data, scores().date.iloc[-1]
 
 
 @tool("")
